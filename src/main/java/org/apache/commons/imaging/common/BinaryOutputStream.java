@@ -1,8 +1,8 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
+ * this work for additional information regardingnership.
+ * The ASF licenses this file to You under the Apac copyright owhe License, Version 2.0
  * (the "License"); you may not use this file except in compliance with
  * the License.  You may obtain a copy of the License at
  *
@@ -16,98 +16,45 @@
  */
 package org.apache.commons.imaging.common;
 
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteOrder;
+import java.util.Objects;
 
-public class BinaryOutputStream extends OutputStream {
-    private final OutputStream os;
-    // default byte order for Java, many file formats.
-    private ByteOrder byteOrder = ByteOrder.BIG_ENDIAN;
-    private int count;
+public abstract class BinaryOutputStream extends FilterOutputStream {
 
-    public BinaryOutputStream(final OutputStream os, final ByteOrder byteOrder) {
-        this.byteOrder = byteOrder;
-        this.os = os;
+    public static BigEndianBinaryOutputStream bigEndian(final OutputStream outputStream) {
+        return new BigEndianBinaryOutputStream(outputStream);
     }
 
-    public BinaryOutputStream(final OutputStream os) {
-        this.os = os;
-    }
-
-    protected void setByteOrder(final ByteOrder byteOrder) {
-        this.byteOrder = byteOrder;
-    }
-
-    public ByteOrder getByteOrder() {
-        return byteOrder;
-    }
-
-    @Override
-    public void write(final int i) throws IOException {
-        os.write(i);
-        count++;
-    }
-
-    @Override
-    public final void write(final byte[] bytes) throws IOException {
-        os.write(bytes, 0, bytes.length);
-        count += bytes.length;
-    }
-
-    @Override
-    public final void write(final byte[] bytes, final int offset, final int length) throws IOException {
-        os.write(bytes, offset, length);
-        count += length;
-    }
-
-    @Override
-    public void flush() throws IOException {
-        os.flush();
-    }
-
-    @Override
-    public void close() throws IOException {
-        os.close();
-    }
-
-    public int getByteCount() {
-        return count;
-    }
-
-    public final void write4Bytes(final int value) throws IOException {
-        if (byteOrder == ByteOrder.BIG_ENDIAN) {
-            write(0xff & (value >> 24));
-            write(0xff & (value >> 16));
-            write(0xff & (value >> 8));
-            write(0xff & value);
-        } else {
-            write(0xff & value);
-            write(0xff & (value >> 8));
-            write(0xff & (value >> 16));
-            write(0xff & (value >> 24));
+    @SuppressWarnings("resource")
+    public static BinaryOutputStream create(final OutputStream outputStream, final ByteOrder byteOrder) {
+        Objects.requireNonNull(outputStream, "outputStream");
+        Objects.requireNonNull(byteOrder, "byteOrder");
+        if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+            return littleEndian(outputStream);
+        } else if (byteOrder == ByteOrder.BIG_ENDIAN) {
+            return bigEndian(outputStream);
         }
+        throw new UnsupportedOperationException(byteOrder.toString());
     }
 
-    public final void write3Bytes(final int value) throws IOException {
-        if (byteOrder == ByteOrder.BIG_ENDIAN) {
-            write(0xff & (value >> 16));
-            write(0xff & (value >> 8));
-            write(0xff & value);
-        } else {
-            write(0xff & value);
-            write(0xff & (value >> 8));
-            write(0xff & (value >> 16));
-        }
+    public static LittleEndianBinaryOutputStream littleEndian(final OutputStream outputStream) {
+        return new LittleEndianBinaryOutputStream(outputStream);
     }
 
-    public final void write2Bytes(final int value) throws IOException {
-        if (byteOrder == ByteOrder.BIG_ENDIAN) {
-            write(0xff & (value >> 8));
-            write(0xff & value);
-        } else {
-            write(0xff & value);
-            write(0xff & (value >> 8));
-        }
+    public BinaryOutputStream(final OutputStream outputStream) {
+        super(outputStream);
     }
+
+    public BinaryOutputStream(final OutputStream outputStream, final ByteOrder byteOrder) {
+        super(outputStream);
+    }
+
+    public abstract void write2Bytes(int value) throws IOException;
+
+    public abstract void write3Bytes(int value) throws IOException;
+
+    public abstract void write4Bytes(int value) throws IOException;
 }

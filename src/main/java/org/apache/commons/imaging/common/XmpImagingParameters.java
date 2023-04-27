@@ -21,9 +21,11 @@ import org.apache.commons.imaging.ImagingParameters;
 
 /**
  * Parameters for formats that support Xmp.
+ *
+ * @param <E> this type
  * @since 1.0-alpha3
  */
-public class XmpImagingParameters extends ImagingParameters {
+public class XmpImagingParameters<E extends XmpImagingParameters<E>> extends ImagingParameters<E> {
 
     private String xmpXml;
 
@@ -31,8 +33,9 @@ public class XmpImagingParameters extends ImagingParameters {
         return xmpXml;
     }
 
-    public void setXmpXml(final String xmpXml) {
+    public E setXmpXml(final String xmpXml) {
         this.xmpXml = xmpXml;
+        return asThis();
     }
 
 }

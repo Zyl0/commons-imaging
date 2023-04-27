@@ -27,7 +27,7 @@ import org.apache.commons.imaging.ImagingParameters;
 import org.apache.commons.imaging.formats.jpeg.JpegImagingParameters;
 import org.apache.commons.imaging.formats.tiff.TiffImagingParameters;
 import org.apache.commons.imaging.internal.Debug;
-import org.apache.commons.imaging.internal.Util;
+import org.apache.commons.imaging.internal.ImageParserFactory;
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -160,19 +160,19 @@ public class ByteSourceImageTest extends ByteSourceTest {
         assertArrayEquals(iccBytesFile, iccBytesBytes);
     }
 
-    public void checkGetImageInfo(final File imageFile, final byte[] imageFileBytes) throws IOException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, ImageReadException {
+    public void checkGetImageInfo(final File imageFile, final byte[] imageFileBytes)
+            throws IOException, IllegalAccessException, IllegalArgumentException, InvocationTargetException, ImageReadException {
         final boolean ignoreImageData = isPhilHarveyTestImage(imageFile);
         final ImageFormat imageFormat = Imaging.guessFormat(imageFile);
         ImagingParameters params = null;
         if (imageFormat == ImageFormats.TIFF) {
-            params = new TiffImagingParameters();
-            ((TiffImagingParameters) params).setReadThumbnails(!ignoreImageData);
+            params = new TiffImagingParameters().setReadThumbnails(!ignoreImageData);
         }
         if (imageFormat == ImageFormats.JPEG) {
             params = new JpegImagingParameters();
         }
 
-        final ImageParser imageParser = Util.getImageParser(imageFormat);
+        final ImageParser imageParser = ImageParserFactory.getImageParser(imageFormat);
 
         final ImageInfo imageInfoFile = imageParser.getImageInfo(imageFile, params);
 
@@ -189,15 +189,14 @@ public class ByteSourceImageTest extends ByteSourceTest {
             if (!method2.getName().startsWith("get")) {
                 continue;
             }
-            if (method2.getName().equals("getClass"))
-             {
+            if (method2.getName().equals("getClass")) {
                 continue;
-            // if (method.getGenericParameterTypes().length > 0)
-            // continue;
+                // if (method.getGenericParameterTypes().length > 0)
+                // continue;
             }
 
-            final Object valueFile = method2.invoke(imageInfoFile, (Object[])null);
-            final Object valueBytes = method2.invoke(imageInfoBytes, (Object[])null);
+            final Object valueFile = method2.invoke(imageInfoFile, (Object[]) null);
+            final Object valueBytes = method2.invoke(imageInfoBytes, (Object[]) null);
 
             assertEquals(valueFile, valueBytes);
         }

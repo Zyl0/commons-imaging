@@ -89,8 +89,7 @@ public class BmpImageParser extends ImageParser<BmpImagingParameters> {
 
     @Override
     protected ImageFormat[] getAcceptedTypes() {
-        return new ImageFormat[] { ImageFormats.BMP, //
-        };
+        return new ImageFormat[] { ImageFormats.BMP };
     }
 
     private BmpHeaderInfo readBmpHeaderInfo(final InputStream is,
@@ -667,7 +666,7 @@ public class BmpImageParser extends ImageParser<BmpImagingParameters> {
         }
 
         final byte[] imageData = writer.getImageData(src);
-        final BinaryOutputStream bos = new BinaryOutputStream(os, ByteOrder.LITTLE_ENDIAN);
+        final BinaryOutputStream bos = BinaryOutputStream.littleEndian(os);
 
         // write BitmapFileHeader
         os.write(0x42); // B, Windows 3.1x, 95, NT, Bitmap
