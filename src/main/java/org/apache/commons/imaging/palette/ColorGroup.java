@@ -85,7 +85,7 @@ class ColorGroup {
         final int alpha = 0xff & argb >> 24;
         final int red = 0xff & argb >> 16;
         final int green = 0xff & argb >> 8;
-        final int blue = 0xff & argb >> 0;
+        final int blue = 0xff & argb;
 
         if (!ignoreAlpha && (alpha < minAlpha || alpha > maxAlpha)) {
             return false;
@@ -96,10 +96,7 @@ class ColorGroup {
         if (green < minGreen || green > maxGreen) {
             return false;
         }
-        if (blue < minBlue || blue > maxBlue) {
-            return false;
-        }
-        return true;
+        return blue >= minBlue && blue <= maxBlue;
     }
 
     /**
@@ -119,10 +116,10 @@ class ColorGroup {
 
         for (final ColorCount color : colorCounts) {
             countTotal += color.count;
-            alphaTotal += color.count * color.alpha;
-            redTotal += color.count * color.red;
-            greenTotal += color.count * color.green;
-            blueTotal += color.count * color.blue;
+            alphaTotal += (long) color.count * color.alpha;
+            redTotal += (long) color.count * color.red;
+            greenTotal += (long) color.count * color.green;
+            blueTotal += (long) color.count * color.blue;
         }
 
         final int alpha = ignoreAlpha ? 0xff : (int) Math.round((double) alphaTotal / countTotal);
