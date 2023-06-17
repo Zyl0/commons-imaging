@@ -281,8 +281,8 @@ public final class T4AndT6Compression {
     public static byte[] compressT6(final byte[] uncompressed, final int width, final int height)
             throws ImagingException {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(uncompressed);
-                BitInputStreamFlexible inputStream = new BitInputStreamFlexible(bais)) {
-            final BitArrayOutputStream outputStream = new BitArrayOutputStream();
+                BitInputStreamFlexible inputStream = new BitInputStreamFlexible(bais);
+            final BitArrayOutputStream outputStream = new BitArrayOutputStream()) {
             int[] referenceLine = Allocator.intArray(width);
             int[] codingLine = Allocator.intArray(width);
             for (int y = 0; y < height; y++) {
@@ -326,9 +326,7 @@ public final class T4AndT6Compression {
             // EOFB
             T4_T6_Tables.EOL.writeBits(outputStream);
             T4_T6_Tables.EOL.writeBits(outputStream);
-            byte[] byteArray = outputStream.toByteArray();
-            outputStream.close();
-            return byteArray;
+            return outputStream.toByteArray();
         } catch (final IOException ioException) {
             throw new ImagingException("I/O error", ioException);
         }
