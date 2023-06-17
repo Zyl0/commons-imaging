@@ -16,13 +16,12 @@
  */
 package org.apache.commons.imaging.formats.icns;
 
-final class Rle24Compression {
-    private Rle24Compression() {
-    }
+import org.apache.commons.imaging.common.Allocator;
 
+final class Rle24Compression {
     public static byte[] decompress(final int width, final int height, final byte[] data) {
         final int pixelCount = width * height;
-        final byte[] result = new byte[4 * pixelCount];
+        final byte[] result = Allocator.byteArray(4 * pixelCount);
 
         // Several ICNS parsers advance by 4 bytes here:
         // http://code.google.com/p/icns2png/ - when the width is >= 128
@@ -63,5 +62,8 @@ final class Rle24Compression {
             }
         }
         return result;
+    }
+
+    private Rle24Compression() {
     }
 }

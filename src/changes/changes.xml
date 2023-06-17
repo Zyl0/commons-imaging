@@ -57,6 +57,13 @@ The <action> type attribute can be add,update,fix,remove.
       <action dev="ggregory" type="update" due-to="Gary Gregory">
         BinaryOutputStream now subclasses FilterOutputStream instead of OutputStream and does not need to count bytes.
       </action>
+      <action issue="IMAGING-353" dev="ggregory" type="update" due-to="Jeroen van der Vegt, Gary Gregory">
+        Fix PngImageParser hasPalette #295.
+      </action>
+      <!-- ADD -->
+      <action issue="IMAGING-352" dev="ggregory" type="update" due-to="Jeroen van der Vegt, Gary Gregory">
+        [PngWriter] Allow custom PaletteFactory #294.
+      </action>
       <!-- UPDATE -->
       <action dev="kinow" type="update" due-to="Dependabot, Gary Gregory">
         Bump actions/cache from 3.0.4 to 3.0.10 #225, #228, #239, #240.
@@ -67,8 +74,8 @@ The <action> type attribute can be add,update,fix,remove.
       <action dev="ggregory" type="update" due-to="Gary Gregory">
         Bump actions/setup-java from 3 to 3.5.1.
       </action>
-      <action dev="ggregory" type="update" due-to="Dependabot">
-        Bump commons-parent from 52 to 56 #238, #252, #262.
+      <action dev="ggregory" type="update" due-to="Dependabot, Gary Gregory">
+        Bump commons-parent from 52 to 58 #238, #252, #262, #293.
       </action>
       <action dev="kinow" type="update" due-to="Dependabot">
         Bump spotbugs-maven-plugin from 4.6.0.0 to 4.7.3.0 #221, #224, #226, #236, #242, #247, #248.
@@ -87,6 +94,9 @@ The <action> type attribute can be add,update,fix,remove.
       </action>
       <action dev="kinow" type="update" due-to="Dependabot">
         Bump maven-checkstyle plugin from 3.1.2 to 3.2.1 #233, #266.
+      </action>
+      <action type="update" due-to="Gary Gregory">
+        Bump tests commons-io:commons-io 2.6 to 2.12.0.
       </action>
       <action issue="IMAGING-347" dev="kinow" type="update" due-to="snumlautoken">
         Refactor BasicCParser::unescapeString().

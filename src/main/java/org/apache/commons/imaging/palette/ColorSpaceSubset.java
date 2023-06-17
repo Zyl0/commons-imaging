@@ -23,17 +23,28 @@ import java.util.logging.Logger;
 
 class ColorSpaceSubset {
 
-    private static final Logger LOGGER = Logger.getLogger(ColorSpaceSubset.class.getName());
+    public static class RgbComparator implements Comparator<ColorSpaceSubset>, Serializable {
 
+        private static final long serialVersionUID = -1L;
+
+        @Override
+        public int compare(final ColorSpaceSubset c1, final ColorSpaceSubset c2) {
+            return c1.rgb - c2.rgb;
+        }
+    }
+
+    private static final Logger LOGGER = Logger.getLogger(ColorSpaceSubset.class.getName());
+    public static final RgbComparator RGB_COMPARATOR = new RgbComparator();
+    static final int SHALLOW_SIZE = 40;
     final int[] mins;
     final int[] maxs;
     final int precision;
     final int precisionMask;
     final int total;
+
     int rgb; // median
     // the index in the palette.
     private int index;
-    public static final RgbComparator RGB_COMPARATOR = new RgbComparator();
 
     ColorSpaceSubset(final int total, final int precision) {
         this.total = total;
@@ -131,6 +142,10 @@ class ColorSpaceSubset {
 
     }
 
+    public final int getIndex() {
+        return index;
+    }
+
     public void setAverageRGB(final int[] table) {
         long redsum = 0;
         long greensum = 0;
@@ -157,20 +172,7 @@ class ColorSpaceSubset {
         rgb = (int) (((redsum & 0xff) << 16) | ((greensum & 0xff) << 8) | ((bluesum & 0xff) << 0));
     }
 
-    public final int getIndex() {
-        return index;
-    }
-
     public final void setIndex(final int i) {
         index = i;
-    }
-
-    public static class RgbComparator implements Comparator<ColorSpaceSubset>, Serializable {
-        private static final long serialVersionUID = 509214838111679029L;
-
-        @Override
-        public int compare(final ColorSpaceSubset c1, final ColorSpaceSubset c2) {
-            return c1.rgb - c2.rgb;
-        }
     }
 }

@@ -19,7 +19,7 @@ package org.apache.commons.imaging.formats.gif;
 import org.apache.commons.imaging.common.ImageMetadata;
 
 public class GifImageMetadataItem implements ImageMetadata.ImageMetadataItem {
-    private static final String NEWLINE = System.getProperty("line.separator");
+    private static final String NEWLINE = System.lineSeparator();
     private final int delay;
     private final int leftPosition;
     private final int topPosition;
@@ -36,16 +36,16 @@ public class GifImageMetadataItem implements ImageMetadata.ImageMetadataItem {
         return delay;
     }
 
+    public DisposalMethod getDisposalMethod() {
+        return disposalMethod;
+    }
+
     public int getLeftPosition() {
         return leftPosition;
     }
 
     public int getTopPosition() {
         return topPosition;
-    }
-
-    public DisposalMethod getDisposalMethod() {
-        return disposalMethod;
     }
 
     @Override

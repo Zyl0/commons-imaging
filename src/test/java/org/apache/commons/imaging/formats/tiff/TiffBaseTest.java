@@ -23,20 +23,20 @@ import java.util.List;
 
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class TiffBaseTest extends ImagingTest {
+
+    private static final ImageFilter IMAGE_FILTER = TiffBaseTest::isTiff;
 
     private static boolean isTiff(final File file) throws IOException {
         final ImageFormat format = Imaging.guessFormat(file);
         return format == ImageFormats.TIFF;
     }
 
-    private static final ImageFilter IMAGE_FILTER = TiffBaseTest::isTiff;
-
-    protected List<File> getTiffImages() throws IOException, ImageReadException {
+    protected List<File> getTiffImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 

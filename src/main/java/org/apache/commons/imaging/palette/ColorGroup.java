@@ -19,9 +19,10 @@ package org.apache.commons.imaging.palette;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 
 class ColorGroup {
+
     // final ColorGroup parent;
     ColorGroupCut cut;
     // final List children = new ArrayList();
@@ -47,12 +48,12 @@ class ColorGroup {
     final int diffTotal;
     final int totalPoints;
 
-    ColorGroup(final List<ColorCount> colorCounts, final boolean ignoreAlpha) throws ImageWriteException {
+    ColorGroup(final List<ColorCount> colorCounts, final boolean ignoreAlpha) throws ImagingException {
         this.colorCounts = colorCounts;
         this.ignoreAlpha = ignoreAlpha;
 
         if (colorCounts.isEmpty()) {
-            throw new ImageWriteException("empty color_group");
+            throw new ImagingException("Empty color_group");
         }
 
         int total = 0;
@@ -81,10 +82,10 @@ class ColorGroup {
     }
 
     boolean contains(final int argb) {
-        final int alpha = 0xff & (argb >> 24);
-        final int red = 0xff & (argb >> 16);
-        final int green = 0xff & (argb >> 8);
-        final int blue = 0xff & (argb >> 0);
+        final int alpha = 0xff & argb >> 24;
+        final int red = 0xff & argb >> 16;
+        final int green = 0xff & argb >> 8;
+        final int blue = 0xff & argb >> 0;
 
         if (!ignoreAlpha && (alpha < minAlpha || alpha > maxAlpha)) {
             return false;
@@ -99,6 +100,14 @@ class ColorGroup {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Return a copy of the list of color counts.
+     * @return a copy of the list of color counts
+     */
+    List<ColorCount> getColorCounts() {
+        return new ArrayList<>(colorCounts);
     }
 
     int getMedianValue() {
@@ -121,15 +130,7 @@ class ColorGroup {
         final int green = (int) Math.round((double) greenTotal / countTotal);
         final int blue = (int) Math.round((double) blueTotal / countTotal);
 
-        return (alpha << 24) | (red << 16) | (green << 8) | blue;
-    }
-
-    /**
-     * Return a copy of the list of color counts.
-     * @return a copy of the list of color counts
-     */
-    List<ColorCount> getColorCounts() {
-        return new ArrayList<>(colorCounts);
+        return alpha << 24 | red << 16 | green << 8 | blue;
     }
 
     @Override

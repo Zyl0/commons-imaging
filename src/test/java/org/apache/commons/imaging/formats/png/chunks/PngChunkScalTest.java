@@ -18,7 +18,7 @@ package org.apache.commons.imaging.formats.png.chunks;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -27,47 +27,47 @@ public class PngChunkScalTest {
    private static final int chunkType = 1933787468;
 
    @Test
-   public void testConstructMeters() throws ImageReadException {
-      final PngChunkScal pngChunkScal = new PngChunkScal(10, chunkType, 0,
-            new byte[]{1, 48, 46, 48, 49, 0, 48, 46, 48, 50});
-
-      assertEquals(pngChunkScal.unitSpecifier, 1);
-      assertEquals(pngChunkScal.unitsPerPixelXAxis, 0.01, delta);
-      assertEquals(pngChunkScal.unitsPerPixelYAxis, 0.02, delta);
-   }
-
-   @Test
-   public void testConstructRadians() throws ImageReadException {
-      final PngChunkScal pngChunkScal = new PngChunkScal(10, chunkType, 0,
-            new byte[]{2, 48, 46, 48, 49, 0, 48, 46, 48, 50});
-
-      assertEquals(pngChunkScal.unitSpecifier, 2);
-      assertEquals(pngChunkScal.unitsPerPixelXAxis, 0.01, delta);
-      assertEquals(pngChunkScal.unitsPerPixelYAxis, 0.02, delta);
+   public void testConstruct_InvalidDblValue() {
+       Assertions.assertThrows(ImagingException.class,() -> new PngChunkScal(10, chunkType, 0, new byte[]{2, 65, 46, 48, 49, 0, 48, 46, 48, 50}));
    }
 
    @Test
    public void testConstruct_InvalidUnitSpecifier() {
-       Assertions.assertThrows(ImageReadException.class,() -> new PngChunkScal(10, chunkType, 0, new byte[]{3, 48, 46, 48, 49, 0, 48, 46, 48, 50}));
+       Assertions.assertThrows(ImagingException.class,() -> new PngChunkScal(10, chunkType, 0, new byte[]{3, 48, 46, 48, 49, 0, 48, 46, 48, 50}));
    }
 
    @Test
    public void testConstruct_MissingSeparator() {
-      Assertions.assertThrows(ImageReadException.class,() -> new PngChunkScal(9, chunkType, 0, new byte[]{1, 48, 46, 48, 49, 48, 46, 48, 50}));
-   }
-
-   @Test
-   public void testConstruct_InvalidDblValue() {
-       Assertions.assertThrows(ImageReadException.class,() -> new PngChunkScal(10, chunkType, 0, new byte[]{2, 65, 46, 48, 49, 0, 48, 46, 48, 50}));
+      Assertions.assertThrows(ImagingException.class,() -> new PngChunkScal(9, chunkType, 0, new byte[]{1, 48, 46, 48, 49, 48, 46, 48, 50}));
    }
 
    @Test
    public void testConstruct_MissingXValue() {
-      Assertions.assertThrows(ImageReadException.class,() -> new PngChunkScal(2, chunkType, 0, new byte[]{2, 0}));
+      Assertions.assertThrows(ImagingException.class,() -> new PngChunkScal(2, chunkType, 0, new byte[]{2, 0}));
    }
 
    @Test
    public void testConstruct_MissingYValue() {
-       Assertions.assertThrows(ImageReadException.class,() -> new PngChunkScal(6, chunkType, 0, new byte[]{2, 48, 46, 48, 49, 0}));
+       Assertions.assertThrows(ImagingException.class,() -> new PngChunkScal(6, chunkType, 0, new byte[]{2, 48, 46, 48, 49, 0}));
+   }
+
+   @Test
+   public void testConstructMeters() throws ImagingException {
+      final PngChunkScal pngChunkScal = new PngChunkScal(10, chunkType, 0,
+            new byte[]{1, 48, 46, 48, 49, 0, 48, 46, 48, 50});
+
+      assertEquals(pngChunkScal.getUnitSpecifier(), 1);
+      assertEquals(pngChunkScal.getUnitsPerPixelXAxis(), 0.01, delta);
+      assertEquals(pngChunkScal.getUnitsPerPixelYAxis(), 0.02, delta);
+   }
+
+   @Test
+   public void testConstructRadians() throws ImagingException {
+      final PngChunkScal pngChunkScal = new PngChunkScal(10, chunkType, 0,
+            new byte[]{2, 48, 46, 48, 49, 0, 48, 46, 48, 50});
+
+      assertEquals(pngChunkScal.getUnitSpecifier(), 2);
+      assertEquals(pngChunkScal.getUnitsPerPixelXAxis(), 0.01, delta);
+      assertEquals(pngChunkScal.getUnitsPerPixelYAxis(), 0.02, delta);
    }
 }

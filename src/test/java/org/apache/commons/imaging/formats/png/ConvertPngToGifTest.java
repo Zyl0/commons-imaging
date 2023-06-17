@@ -17,17 +17,17 @@
 
 package org.apache.commons.imaging.formats.png;
 
-import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.Imaging;
-import org.apache.commons.imaging.internal.Debug;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import org.apache.commons.imaging.ImageFormats;
+import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.internal.Debug;
+import org.junit.jupiter.api.Test;
 
 public class ConvertPngToGifTest extends PngBaseTest {
 
@@ -37,7 +37,7 @@ public class ConvertPngToGifTest extends PngBaseTest {
         final List<File> images = getPngImages();
         for (final File imageFile : images) {
 
-            if (isInvalidPNGTestFile(imageFile))
+            if (isInvalidPngTestFile(imageFile))
              {
                 continue;
             }

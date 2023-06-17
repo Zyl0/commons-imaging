@@ -17,14 +17,8 @@
 
 package org.apache.commons.imaging.formats.icns;
 
-import org.apache.commons.imaging.ImageInfo;
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.Imaging;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -33,8 +27,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import org.apache.commons.imaging.ImageInfo;
+import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 public class IcnsReadTest extends IcnsBaseTest {
 
@@ -59,20 +59,6 @@ public class IcnsReadTest extends IcnsBaseTest {
                 .stream();
     }
 
-    @Disabled(value = "RoundtripTest has to be fixed befor implementation can throw UnsupportedOperationException")
-    @ParameterizedTest
-    @MethodSource("data")
-    public void testImageMetadata(final File imageFile) {
-        Assertions.assertThrows(UnsupportedOperationException.class, () -> Imaging.getMetadata(imageFile));
-    }
-
-    @ParameterizedTest
-    @MethodSource("data")
-    public void testImageInfo(final File imageFile) throws Exception {
-        final ImageInfo imageInfo = Imaging.getImageInfo(imageFile);
-        assertNotNull(imageInfo);
-    }
-
     @ParameterizedTest
     @MethodSource("data")
     public void testBufferedImage(final File imageFile) throws Exception {
@@ -85,13 +71,27 @@ public class IcnsReadTest extends IcnsBaseTest {
      * Test ICNS types such as mono (ICON) and some types for either JPEG2000 or PNG
      * (icp4, icp5, ic11, etc). For IMAGING-248.
      * @throws IOException if it fails to read the input stream
-     * @throws ImageReadException if the image is corrupted or invalid
+     * @throws ImagingException if the image is corrupted or invalid
      */
     @ParameterizedTest()
     @MethodSource("provideIcnsImagesWithMonoAndJpegPngData")
-    public void testIcnsElementMonoPngJpeg(final String file, final int numberOfImages) throws ImageReadException, IOException {
+    public void testIcnsElementMonoPngJpeg(final String file, final int numberOfImages) throws ImagingException, IOException {
         final File testFile = new File(IcnsReadTest.class.getResource(file).getFile());
         final List<BufferedImage> images = new IcnsImageParser().getAllBufferedImages(testFile);
         assertEquals(numberOfImages, images.size());
+    }
+
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testImageInfo(final File imageFile) throws Exception {
+        final ImageInfo imageInfo = Imaging.getImageInfo(imageFile);
+        assertNotNull(imageInfo);
+    }
+
+    @Disabled(value = "RoundtripTest has to be fixed befor implementation can throw UnsupportedOperationException")
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testImageMetadata(final File imageFile) {
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> Imaging.getMetadata(imageFile));
     }
 }

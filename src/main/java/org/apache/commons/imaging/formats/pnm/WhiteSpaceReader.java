@@ -19,19 +19,13 @@ package org.apache.commons.imaging.formats.pnm;
 import java.io.IOException;
 import java.io.InputStream;
 
+import org.apache.commons.imaging.ImagingException;
+
 class WhiteSpaceReader {
     private final InputStream is;
 
     WhiteSpaceReader(final InputStream is) {
         this.is = is;
-    }
-
-    private char read() throws IOException {
-        final int result = is.read();
-        if (result < 0) {
-            throw new IOException("PNM: Unexpected EOF");
-        }
-        return (char) result;
     }
 
     public char nextChar() throws IOException {
@@ -43,6 +37,22 @@ class WhiteSpaceReader {
             }
         }
         return c;
+    }
+
+    private char read() throws IOException {
+        final int result = is.read();
+        if (result < 0) {
+            throw new ImagingException("PNM: Unexpected EOF");
+        }
+        return (char) result;
+    }
+
+    public String readLine() throws IOException {
+        final StringBuilder buffer = new StringBuilder();
+        for (char c = read(); (c != '\n') && (c != '\r'); c = read()) {
+            buffer.append(c);
+        }
+        return buffer.length() > 0 ? buffer.toString() : null;
     }
 
     public String readtoWhiteSpace() throws IOException {
@@ -60,13 +70,5 @@ class WhiteSpaceReader {
         }
 
         return buffer.toString();
-    }
-
-    public String readLine() throws IOException {
-        final StringBuilder buffer = new StringBuilder();
-        for (char c = read(); (c != '\n') && (c != '\r'); c = read()) {
-            buffer.append(c);
-        }
-        return buffer.length() > 0 ? buffer.toString() : null;
     }
 }

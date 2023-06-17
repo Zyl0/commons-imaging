@@ -22,48 +22,45 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.formats.png.GammaCorrection;
 
 public class PngChunkPlte extends PngChunk {
     private final int[] rgb;
 
     public PngChunkPlte(final int length, final int chunkType, final int crc, final byte[] bytes)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         super(length, chunkType, crc, bytes);
 
         final ByteArrayInputStream is = new ByteArrayInputStream(bytes);
 
         if ((length % 3) != 0) {
-            throw new ImageReadException("PLTE: wrong length: " + length);
+            throw new ImagingException("PLTE: wrong length: " + length);
         }
 
         final int count = length / 3;
 
-        rgb = new int[count];
+        rgb = Allocator.intArray(count);
 
         for (int i = 0; i < count; i++) {
             final int red = readByte("red[" + i + "]", is,
-                    "Not a Valid Png File: PLTE Corrupt");
+                    "Not a Valid PNG File: PLTE Corrupt");
             final int green = readByte("green[" + i + "]", is,
-                    "Not a Valid Png File: PLTE Corrupt");
+                    "Not a Valid PNG File: PLTE Corrupt");
             final int blue = readByte("blue[" + i + "]", is,
-                    "Not a Valid Png File: PLTE Corrupt");
+                    "Not a Valid PNG File: PLTE Corrupt");
             rgb[i] = 0xff000000 | ((0xff & red) << 16) | ((0xff & green) << 8)
                     | ((0xff & blue) << 0);
         }
     }
 
-    public int[] getRgb() {
-        return rgb.clone();
+    public void correct(final GammaCorrection gammaCorrection) {
+        Arrays.setAll(rgb, i -> gammaCorrection.correctARGB(rgb[i]));
     }
 
-    public int getRGB(final int index) throws ImageReadException {
-        if ((index < 0) || (index >= rgb.length)) {
-            throw new ImageReadException("PNG: unknown Palette reference: "
-                    + index);
-        }
-        return rgb[index];
+    public int[] getRgb() {
+        return rgb.clone();
     }
 
     // public void printPalette() {
@@ -77,8 +74,12 @@ public class PngChunkPlte extends PngChunk {
     // Debug.debug();
     // }
 
-    public void correct(final GammaCorrection gammaCorrection) {
-        Arrays.setAll(rgb, i -> gammaCorrection.correctARGB(rgb[i]));
+    public int getRGB(final int index) throws ImagingException {
+        if ((index < 0) || (index >= rgb.length)) {
+            throw new ImagingException("PNG: unknown Palette reference: "
+                    + index);
+        }
+        return rgb[index];
     }
 
 }

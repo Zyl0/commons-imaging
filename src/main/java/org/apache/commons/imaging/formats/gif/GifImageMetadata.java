@@ -23,7 +23,8 @@ import java.util.List;
 import org.apache.commons.imaging.common.ImageMetadata;
 
 public class GifImageMetadata implements ImageMetadata {
-    private static final String NEWLINE = System.getProperty("line.separator");
+
+    private static final String NEWLINE = System.lineSeparator();
     private final int width;
     private final int height;
     private final List<GifImageMetadataItem> items;
@@ -32,6 +33,19 @@ public class GifImageMetadata implements ImageMetadata {
         this.width = width;
         this.height = height;
         this.items = Collections.unmodifiableList(new ArrayList<>(items));
+    }
+
+    public int getHeight() {
+        return height;
+    }
+
+    @Override
+    public List<GifImageMetadataItem> getItems() {
+        return Collections.unmodifiableList(items);
+    }
+
+    public int getWidth() {
+        return width;
     }
 
     @Override
@@ -48,18 +62,5 @@ public class GifImageMetadata implements ImageMetadata {
             result.append(item.toString(prefix));
         }
         return result.toString();
-    }
-
-    public int getWidth() {
-        return width;
-    }
-
-    public int getHeight() {
-        return height;
-    }
-
-    @Override
-    public List<GifImageMetadataItem> getItems() {
-        return Collections.unmodifiableList(items);
     }
 }

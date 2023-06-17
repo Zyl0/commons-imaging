@@ -27,145 +27,151 @@ import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 
 /**
  * Factory for creating palettes.
  */
 public class PaletteFactory {
 
+    private static class DivisionCandidate {
+        // private final ColorSpaceSubset src;
+        private final ColorSpaceSubset dst_a;
+        private final ColorSpaceSubset dst_b;
+
+        DivisionCandidate(final ColorSpaceSubset dst_a, final ColorSpaceSubset dst_b) {
+            // this.src = src;
+            this.dst_a = dst_a;
+            this.dst_b = dst_b;
+        }
+    }
+
     private static final Logger LOGGER = Logger.getLogger(PaletteFactory.class.getName());
 
     public static final int COMPONENTS = 3; // in bits
 
-    /**
-     * Builds an exact complete opaque palette containing all the colors in {@code src},
-     * using an algorithm that is faster than {@linkplain #makeExactRgbPaletteSimple} for large images
-     * but uses 2 mebibytes of working memory. Treats all the colors as opaque.
-     * @param src the image whose palette to build
-     * @return the palette
-     */
-    public Palette makeExactRgbPaletteFancy(final BufferedImage src) {
-        // map what rgb values have been used
-
-        final byte[] rgbmap = new byte[256 * 256 * 32];
+    public int countTransparentColors(final BufferedImage src) {
+        final ColorModel cm = src.getColorModel();
+        if (!cm.hasAlpha()) {
+            return 0;
+        }
 
         final int width = src.getWidth();
         final int height = src.getHeight();
 
+        int first = -1;
+
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                final int argb = src.getRGB(x, y);
-                final int rggbb = 0x1fffff & argb;
-                final int highred = 0x7 & (argb >> 21);
-                final int mask = 1 << highred;
-                rgbmap[rggbb] |= mask;
-            }
-        }
-
-        int count = 0;
-        for (final byte element : rgbmap) {
-            final int eight = 0xff & element;
-            count += Integer.bitCount(eight);
-        }
-
-        if (LOGGER.isLoggable(Level.FINEST)) {
-            LOGGER.finest("Used colors: " + count);
-        }
-
-        final int[] colormap = new int[count];
-        int mapsize = 0;
-        for (int i = 0; i < rgbmap.length; i++) {
-            final int eight = 0xff & rgbmap[i];
-            int mask = 0x80;
-            for (int j = 0; j < 8; j++) {
-                final int bit = eight & mask;
-                mask >>>= 1;
-
-                if (bit > 0) {
-                    final int rgb = i | ((7 - j) << 21);
-
-                    colormap[mapsize++] = rgb;
+                final int rgb = src.getRGB(x, y);
+                final int alpha = 0xff & (rgb >> 24);
+                if (alpha < 0xff) {
+                    if (first < 0) {
+                        first = rgb;
+                    } else if (rgb != first) {
+                        return 2; // more than one transparent color;
+                    }
                 }
             }
         }
 
-        Arrays.sort(colormap);
-        return new SimplePalette(colormap);
-    }
-
-    private int pixelToQuantizationTableIndex(int argb, final int precision) {
-        int result = 0;
-        final int precisionMask = (1 << precision) - 1;
-
-        for (int i = 0; i < COMPONENTS; i++) {
-            int sample = argb & 0xff;
-            argb >>= 8;
-
-            sample >>= (8 - precision);
-            result = (result << precision) | (sample & precisionMask);
+        if (first < 0) {
+            return 0;
         }
-
-        return result;
+        return 1;
     }
 
-    private int getFrequencyTotal(final int[] table, final int[] mins, final int[] maxs,
-            final int precision) {
-        int sum = 0;
+    public int countTrasparentColors(final int[] rgbs) {
+        int first = -1;
 
-        for (int blue = mins[2]; blue <= maxs[2]; blue++) {
-            final int b = (blue << (2 * precision));
-            for (int green = mins[1]; green <= maxs[1]; green++) {
-                final int g = (green << (1 * precision));
-                for (int red = mins[0]; red <= maxs[0]; red++) {
-                    final int index = b | g | red;
-
-                    sum += table[index];
+        for (final int rgb : rgbs) {
+            final int alpha = 0xff & (rgb >> 24);
+            if (alpha < 0xff) {
+                if (first < 0) {
+                    first = rgb;
+                } else if (rgb != first) {
+                    return 2; // more than one transparent color;
                 }
             }
         }
 
-        return sum;
+        if (first < 0) {
+            return 0;
+        }
+        return 1;
     }
 
-    private DivisionCandidate finishDivision(final ColorSpaceSubset subset,
-            final int component, final int precision, final int sum, final int slice) {
-        if (LOGGER.isLoggable(Level.FINEST)) {
-            subset.dump("trying (" + component + "): ");
+    private void divide(final List<ColorSpaceSubset> v,
+                        final int desiredCount, final int[] table, final int precision) {
+        final List<ColorSpaceSubset> ignore = new ArrayList<>();
+
+        while (true) {
+            int maxArea = -1;
+            ColorSpaceSubset maxSubset = null;
+
+            for (final ColorSpaceSubset subset : v) {
+                if (ignore.contains(subset)) {
+                    continue;
+                }
+                final int area = subset.total;
+
+                if (maxSubset == null || area > maxArea) {
+                    maxSubset = subset;
+                    maxArea = area;
+                }
+            }
+
+            if (maxSubset == null) {
+                return;
+            }
+            if (LOGGER.isLoggable(Level.FINEST)) {
+                LOGGER.finest("\t" + "area: " + maxArea);
+            }
+
+            final DivisionCandidate dc = divideSubset2(table, maxSubset,
+                    precision);
+            if (dc != null) {
+                v.remove(maxSubset);
+                v.add(dc.dst_a);
+                v.add(dc.dst_b);
+            } else {
+                ignore.add(maxSubset);
+            }
+
+            if (v.size() == desiredCount) {
+                return;
+            }
+        }
+    }
+
+    private DivisionCandidate divideSubset2(final int[] table,
+            final ColorSpaceSubset subset, final int precision) {
+        final List<DivisionCandidate> dcs = new ArrayList<>(divideSubset2(table, subset, 0, precision));
+
+        dcs.addAll(divideSubset2(table, subset, 1, precision));
+        dcs.addAll(divideSubset2(table, subset, 2, precision));
+
+        DivisionCandidate bestV = null;
+        double bestScore = Double.MAX_VALUE;
+
+        for (final DivisionCandidate dc : dcs) {
+            final ColorSpaceSubset first = dc.dst_a;
+            final ColorSpaceSubset second = dc.dst_b;
+            final int area1 = first.total;
+            final int area2 = second.total;
+
+            final int diff = Math.abs(area1 - area2);
+            final double score = ((double) diff) / ((double) Math.max(area1, area2));
+
+            if (bestV == null || score < bestScore) {
+                bestV = dc;
+                bestScore = score;
+            }
+
         }
 
-        final int total = subset.total;
-
-        if ((slice < subset.mins[component])
-                || (slice >= subset.maxs[component])) {
-            return null;
-        }
-
-        if ((sum < 1) || (sum >= total)) {
-            return null;
-        }
-
-        final int[] sliceMins = Arrays.copyOf(subset.mins, subset.mins.length);
-        final int[] sliceMaxs = Arrays.copyOf(subset.maxs, subset.maxs.length);
-
-        sliceMaxs[component] = slice;
-        sliceMins[component] = slice + 1;
-
-        if (LOGGER.isLoggable(Level.FINEST)) {
-            LOGGER.finest("total: " + total);
-            LOGGER.finest("first total: " + sum);
-            LOGGER.finest("second total: " + (total - sum));
-            // System.out.println("start: " + start);
-            // System.out.println("end: " + end);
-            LOGGER.finest("slice: " + slice);
-
-        }
-
-        final ColorSpaceSubset first = new ColorSpaceSubset(sum, precision, subset.mins, sliceMaxs);
-        final ColorSpaceSubset second = new ColorSpaceSubset(total - sum, precision, sliceMins, subset.maxs);
-
-        return new DivisionCandidate(first, second);
-
+        return bestV;
     }
 
     private List<DivisionCandidate> divideSubset2(final int[] table,
@@ -214,88 +220,218 @@ public class PaletteFactory {
         return result;
     }
 
-    private DivisionCandidate divideSubset2(final int[] table,
-            final ColorSpaceSubset subset, final int precision) {
-        final List<DivisionCandidate> dcs = new ArrayList<>(divideSubset2(table, subset, 0, precision));
+    private DivisionCandidate finishDivision(final ColorSpaceSubset subset,
+            final int component, final int precision, final int sum, final int slice) {
+        if (LOGGER.isLoggable(Level.FINEST)) {
+            subset.dump("trying (" + component + "): ");
+        }
 
-        dcs.addAll(divideSubset2(table, subset, 1, precision));
-        dcs.addAll(divideSubset2(table, subset, 2, precision));
+        final int total = subset.total;
 
-        DivisionCandidate bestV = null;
-        double bestScore = Double.MAX_VALUE;
+        if ((slice < subset.mins[component])
+                || (slice >= subset.maxs[component])) {
+            return null;
+        }
 
-        for (final DivisionCandidate dc : dcs) {
-            final ColorSpaceSubset first = dc.dst_a;
-            final ColorSpaceSubset second = dc.dst_b;
-            final int area1 = first.total;
-            final int area2 = second.total;
+        if ((sum < 1) || (sum >= total)) {
+            return null;
+        }
 
-            final int diff = Math.abs(area1 - area2);
-            final double score = ((double) diff) / ((double) Math.max(area1, area2));
+        final int[] sliceMins = Arrays.copyOf(subset.mins, subset.mins.length);
+        final int[] sliceMaxs = Arrays.copyOf(subset.maxs, subset.maxs.length);
 
-            if (bestV == null || score < bestScore) {
-                bestV = dc;
-                bestScore = score;
-            }
+        sliceMaxs[component] = slice;
+        sliceMins[component] = slice + 1;
+
+        if (LOGGER.isLoggable(Level.FINEST)) {
+            LOGGER.finest("total: " + total);
+            LOGGER.finest("first total: " + sum);
+            LOGGER.finest("second total: " + (total - sum));
+            // System.out.println("start: " + start);
+            // System.out.println("end: " + end);
+            LOGGER.finest("slice: " + slice);
 
         }
 
-        return bestV;
+        final ColorSpaceSubset first = new ColorSpaceSubset(sum, precision, subset.mins, sliceMaxs);
+        final ColorSpaceSubset second = new ColorSpaceSubset(total - sum, precision, sliceMins, subset.maxs);
+
+        return new DivisionCandidate(first, second);
+
     }
 
-    private static class DivisionCandidate {
-        // private final ColorSpaceSubset src;
-        private final ColorSpaceSubset dst_a;
-        private final ColorSpaceSubset dst_b;
+    private int getFrequencyTotal(final int[] table, final int[] mins, final int[] maxs,
+            final int precision) {
+        int sum = 0;
 
-        DivisionCandidate(final ColorSpaceSubset dst_a, final ColorSpaceSubset dst_b) {
-            // this.src = src;
-            this.dst_a = dst_a;
-            this.dst_b = dst_b;
+        for (int blue = mins[2]; blue <= maxs[2]; blue++) {
+            final int b = (blue << (2 * precision));
+            for (int green = mins[1]; green <= maxs[1]; green++) {
+                final int g = (green << (1 * precision));
+                for (int red = mins[0]; red <= maxs[0]; red++) {
+                    final int index = b | g | red;
+
+                    sum += table[index];
+                }
+            }
         }
+
+        return sum;
     }
 
-    private void divide(final List<ColorSpaceSubset> v,
-                        final int desiredCount, final int[] table, final int precision) {
-        final List<ColorSpaceSubset> ignore = new ArrayList<>();
+    public boolean hasTransparency(final BufferedImage src) {
+        return hasTransparency(src, 255);
+    }
 
-        while (true) {
-            int maxArea = -1;
-            ColorSpaceSubset maxSubset = null;
+    public boolean hasTransparency(final BufferedImage src, final int threshold) {
+        final int width = src.getWidth();
+        final int height = src.getHeight();
 
-            for (final ColorSpaceSubset subset : v) {
-                if (ignore.contains(subset)) {
-                    continue;
+        if (!src.getColorModel().hasAlpha()) {
+            return false;
+        }
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                final int argb = src.getRGB(x, y);
+                final int alpha = 0xff & (argb >> 24);
+                if (alpha < threshold) {
+                    return true;
                 }
-                final int area = subset.total;
-
-                if (maxSubset == null || area > maxArea) {
-                    maxSubset = subset;
-                    maxArea = area;
-                }
-            }
-
-            if (maxSubset == null) {
-                return;
-            }
-            if (LOGGER.isLoggable(Level.FINEST)) {
-                LOGGER.finest("\t" + "area: " + maxArea);
-            }
-
-            final DivisionCandidate dc = divideSubset2(table, maxSubset,
-                    precision);
-            if (dc != null) {
-                v.remove(maxSubset);
-                v.add(dc.dst_a);
-                v.add(dc.dst_b);
-            } else {
-                ignore.add(maxSubset);
-            }
-
-            if (v.size() == desiredCount) {
-                return;
             }
         }
+        return false;
+    }
+
+    public boolean isGrayscale(final BufferedImage src) {
+        final int width = src.getWidth();
+        final int height = src.getHeight();
+
+        if (ColorSpace.TYPE_GRAY == src.getColorModel().getColorSpace().getType()) {
+            return true;
+        }
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                final int argb = src.getRGB(x, y);
+
+                final int red = 0xff & (argb >> 16);
+                final int green = 0xff & (argb >> 8);
+                final int blue = 0xff & (argb >> 0);
+
+                if (red != green || red != blue) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Builds an exact complete opaque palette containing all the colors in {@code src},
+     * using an algorithm that is faster than {@linkplain #makeExactRgbPaletteSimple} for large images
+     * but uses 2 mebibytes of working memory. Treats all the colors as opaque.
+     * @param src the image whose palette to build
+     * @return the palette
+     */
+    public Palette makeExactRgbPaletteFancy(final BufferedImage src) {
+        // map what rgb values have been used
+
+        final byte[] rgbmap = Allocator.byteArray(256 * 256 * 32);
+
+        final int width = src.getWidth();
+        final int height = src.getHeight();
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                final int argb = src.getRGB(x, y);
+                final int rggbb = 0x1fffff & argb;
+                final int highred = 0x7 & (argb >> 21);
+                final int mask = 1 << highred;
+                rgbmap[rggbb] |= mask;
+            }
+        }
+
+        int count = 0;
+        for (final byte element : rgbmap) {
+            final int eight = 0xff & element;
+            count += Integer.bitCount(eight);
+        }
+
+        if (LOGGER.isLoggable(Level.FINEST)) {
+            LOGGER.finest("Used colors: " + count);
+        }
+
+        final int[] colormap = Allocator.intArray(count);
+        int mapsize = 0;
+        for (int i = 0; i < rgbmap.length; i++) {
+            final int eight = 0xff & rgbmap[i];
+            int mask = 0x80;
+            for (int j = 0; j < 8; j++) {
+                final int bit = eight & mask;
+                mask >>>= 1;
+
+                if (bit > 0) {
+                    final int rgb = i | ((7 - j) << 21);
+
+                    colormap[mapsize++] = rgb;
+                }
+            }
+        }
+
+        Arrays.sort(colormap);
+        return new SimplePalette(colormap);
+    }
+
+    /**
+     * Builds an exact complete opaque palette containing all the colors in {@code src},
+     * and fails by returning {@code null} if there are more than {@code max} colors necessary to do this.
+     * @param src the image whose palette to build
+     * @param max the maximum number of colors the palette can contain
+     * @return the complete palette of {@code max} or less colors, or {@code null} if more than {@code max} colors are necessary
+     */
+    public SimplePalette makeExactRgbPaletteSimple(final BufferedImage src, final int max) {
+        // This is not efficient for large values of max, say, max > 256;
+        final Set<Integer> rgbs = new HashSet<>();
+
+        final int width = src.getWidth();
+        final int height = src.getHeight();
+
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                final int argb = src.getRGB(x, y);
+                final int rgb = 0xffffff & argb;
+
+                if (rgbs.add(rgb) && rgbs.size() > max) {
+                    return null;
+                }
+            }
+        }
+
+        final int[] result = Allocator.intArray(rgbs.size());
+        int next = 0;
+        for (final int rgb : rgbs) {
+            result[next++] = rgb;
+        }
+        Arrays.sort(result);
+
+        return new SimplePalette(result);
+    }
+
+    /**
+     * Builds an inexact possibly translucent palette of at most {@code max} colors in {@code src}
+     * using the traditional Median Cut algorithm. Color bounding boxes are split along the
+     * longest axis, with each step splitting the box. All bits in each component are used.
+     * The Algorithm is slower and seems exact than {@linkplain #makeQuantizedRgbPalette(BufferedImage, int)}.
+     * @param src the image whose palette to build
+     * @param transparent whether to consider the alpha values
+     * @param max the maximum number of colors the palette can contain
+     * @return the palette of at most {@code max} colors
+     * @throws ImagingException if it fails to process the palette
+     */
+    public Palette makeQuantizedRgbaPalette(final BufferedImage src, final boolean transparent, final int max) throws ImagingException {
+        return new MedianCutQuantizer(!transparent).process(src, max,
+                new LongestAxisMedianCut());
     }
 
     /**
@@ -312,7 +448,7 @@ public class PaletteFactory {
 
         final int tableScale = precision * COMPONENTS;
         final int tableSize = 1 << tableScale;
-        final int[] table = new int[tableSize];
+        final int[] table = Allocator.intArray(tableSize);
 
         final int width = src.getWidth();
         final int height = src.getHeight();
@@ -365,154 +501,19 @@ public class PaletteFactory {
         return new QuantizedPalette(subsets, precision);
     }
 
-    /**
-     * Builds an inexact possibly translucent palette of at most {@code max} colors in {@code src}
-     * using the traditional Median Cut algorithm. Color bounding boxes are split along the
-     * longest axis, with each step splitting the box. All bits in each component are used.
-     * The Algorithm is slower and seems exact than {@linkplain #makeQuantizedRgbPalette(BufferedImage, int)}.
-     * @param src the image whose palette to build
-     * @param transparent whether to consider the alpha values
-     * @param max the maximum number of colors the palette can contain
-     * @return the palette of at most {@code max} colors
-     * @throws ImageWriteException if it fails to process the palette
-     */
-    public Palette makeQuantizedRgbaPalette(final BufferedImage src, final boolean transparent, final int max) throws ImageWriteException {
-        return new MedianCutQuantizer(!transparent).process(src, max,
-                new LongestAxisMedianCut());
-    }
+    private int pixelToQuantizationTableIndex(int argb, final int precision) {
+        int result = 0;
+        final int precisionMask = (1 << precision) - 1;
 
-    /**
-     * Builds an exact complete opaque palette containing all the colors in {@code src},
-     * and fails by returning {@code null} if there are more than {@code max} colors necessary to do this.
-     * @param src the image whose palette to build
-     * @param max the maximum number of colors the palette can contain
-     * @return the complete palette of {@code max} or less colors, or {@code null} if more than {@code max} colors are necessary
-     */
-    public SimplePalette makeExactRgbPaletteSimple(final BufferedImage src, final int max) {
-        // This is not efficient for large values of max, say, max > 256;
-        final Set<Integer> rgbs = new HashSet<>();
+        for (int i = 0; i < COMPONENTS; i++) {
+            int sample = argb & 0xff;
+            argb >>= 8;
 
-        final int width = src.getWidth();
-        final int height = src.getHeight();
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                final int argb = src.getRGB(x, y);
-                final int rgb = 0xffffff & argb;
-
-                if (rgbs.add(rgb) && rgbs.size() > max) {
-                    return null;
-                }
-            }
+            sample >>= (8 - precision);
+            result = (result << precision) | (sample & precisionMask);
         }
 
-        final int[] result = new int[rgbs.size()];
-        int next = 0;
-        for (final int rgb : rgbs) {
-            result[next++] = rgb;
-        }
-        Arrays.sort(result);
-
-        return new SimplePalette(result);
-    }
-
-    public boolean isGrayscale(final BufferedImage src) {
-        final int width = src.getWidth();
-        final int height = src.getHeight();
-
-        if (ColorSpace.TYPE_GRAY == src.getColorModel().getColorSpace().getType()) {
-            return true;
-        }
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                final int argb = src.getRGB(x, y);
-
-                final int red = 0xff & (argb >> 16);
-                final int green = 0xff & (argb >> 8);
-                final int blue = 0xff & (argb >> 0);
-
-                if (red != green || red != blue) {
-                    return false;
-                }
-            }
-        }
-        return true;
-    }
-
-    public boolean hasTransparency(final BufferedImage src) {
-        return hasTransparency(src, 255);
-    }
-
-    public boolean hasTransparency(final BufferedImage src, final int threshold) {
-        final int width = src.getWidth();
-        final int height = src.getHeight();
-
-        if (!src.getColorModel().hasAlpha()) {
-            return false;
-        }
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                final int argb = src.getRGB(x, y);
-                final int alpha = 0xff & (argb >> 24);
-                if (alpha < threshold) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public int countTrasparentColors(final int[] rgbs) {
-        int first = -1;
-
-        for (final int rgb : rgbs) {
-            final int alpha = 0xff & (rgb >> 24);
-            if (alpha < 0xff) {
-                if (first < 0) {
-                    first = rgb;
-                } else if (rgb != first) {
-                    return 2; // more than one transparent color;
-                }
-            }
-        }
-
-        if (first < 0) {
-            return 0;
-        }
-        return 1;
-    }
-
-    public int countTransparentColors(final BufferedImage src) {
-        final ColorModel cm = src.getColorModel();
-        if (!cm.hasAlpha()) {
-            return 0;
-        }
-
-        final int width = src.getWidth();
-        final int height = src.getHeight();
-
-        int first = -1;
-
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                final int rgb = src.getRGB(x, y);
-                final int alpha = 0xff & (rgb >> 24);
-                if (alpha < 0xff) {
-                    if (first < 0) {
-                        first = rgb;
-                    } else if (rgb != first) {
-                        return 2; // more than one transparent color;
-                    }
-                }
-            }
-        }
-
-        if (first < 0) {
-            return 0;
-        }
-        return 1;
+        return result;
     }
 
 }

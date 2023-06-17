@@ -23,7 +23,6 @@ import java.awt.Dimension;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -36,11 +35,12 @@ import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
 import org.apache.commons.imaging.ImageInfo;
 import org.apache.commons.imaging.ImageParser;
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.ImageMetadata;
 import org.apache.commons.imaging.common.XmpEmbeddable;
 import org.apache.commons.imaging.common.XmpImagingParameters;
-import org.apache.commons.imaging.common.bytesource.ByteSource;
 import org.apache.commons.imaging.formats.jpeg.decoder.JpegDecoder;
 import org.apache.commons.imaging.formats.jpeg.iptc.IptcParser;
 import org.apache.commons.imaging.formats.jpeg.iptc.PhotoshopApp13Data;
@@ -62,171 +62,35 @@ import org.apache.commons.imaging.formats.tiff.TiffImagingParameters;
 import org.apache.commons.imaging.formats.tiff.constants.TiffTagConstants;
 import org.apache.commons.imaging.internal.Debug;
 
-public class JpegImageParser extends ImageParser<JpegImagingParameters> implements XmpEmbeddable {
+public class JpegImageParser extends ImageParser<JpegImagingParameters> implements XmpEmbeddable<JpegImagingParameters> {
 
     private static final Logger LOGGER = Logger.getLogger(JpegImageParser.class.getName());
 
     private static final String DEFAULT_EXTENSION = ImageFormats.JPEG.getDefaultExtension();
     private static final String[] ACCEPTED_EXTENSIONS = ImageFormats.JPEG.getExtensions();
 
-    public JpegImageParser() {
-        setByteOrder(ByteOrder.BIG_ENDIAN);
+    public static boolean isExifAPP1Segment(final GenericSegment segment) {
+        return startsWith(segment.getSegmentData(), JpegConstants.EXIF_IDENTIFIER_CODE);
     }
 
-    @Override
-    protected ImageFormat[] getAcceptedTypes() {
-        return new ImageFormat[] { ImageFormats.JPEG, //
-        };
-    }
-
-    @Override
-    public JpegImagingParameters getDefaultParameters() {
-        return new JpegImagingParameters();
-    }
-
-    @Override
-    public String getName() {
-        return "Jpeg-Custom";
-    }
-
-    @Override
-    public String getDefaultExtension() {
-        return DEFAULT_EXTENSION;
-    }
-
-
-    @Override
-    protected String[] getAcceptedExtensions() {
-        return ACCEPTED_EXTENSIONS;
-    }
-
-    @Override
-    public final BufferedImage getBufferedImage(final ByteSource byteSource,
-            final JpegImagingParameters params) throws ImageReadException, IOException {
-        final JpegDecoder jpegDecoder = new JpegDecoder();
-        return jpegDecoder.decode(byteSource);
-    }
-
-    private boolean keepMarker(final int marker, final int[] markers) {
-        if (markers == null) {
-            return true;
-        }
-
-        for (final int marker2 : markers) {
-            if (marker2 == marker) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public List<Segment> readSegments(final ByteSource byteSource, final int[] markers, final boolean returnAfterFirst) throws ImageReadException, IOException {
-        final List<Segment> result = new ArrayList<>();
-        final int[] sofnSegments = {
-                // kJFIFMarker,
-                JpegConstants.SOF0_MARKER,
-                JpegConstants.SOF1_MARKER,
-                JpegConstants.SOF2_MARKER,
-                JpegConstants.SOF3_MARKER,
-                JpegConstants.SOF5_MARKER,
-                JpegConstants.SOF6_MARKER,
-                JpegConstants.SOF7_MARKER,
-                JpegConstants.SOF9_MARKER,
-                JpegConstants.SOF10_MARKER,
-                JpegConstants.SOF11_MARKER,
-                JpegConstants.SOF13_MARKER,
-                JpegConstants.SOF14_MARKER,
-                JpegConstants.SOF15_MARKER,
-        };
-
-        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
-            // return false to exit before reading image data.
-            @Override
-            public boolean beginSOS() {
-                return false;
-            }
-
-            @Override
-            public void visitSOS(final int marker, final byte[] markerBytes,
-                    final byte[] imageData) {
-                // don't need image data
-            }
-
-            // return false to exit traversal.
-            @Override
-            public boolean visitSegment(final int marker, final byte[] markerBytes,
-                    final int markerLength, final byte[] markerLengthBytes,
-                    final byte[] segmentData) throws ImageReadException, IOException {
-                if (marker == JpegConstants.EOI_MARKER) {
-                    return false;
-                }
-
-                // Debug.debug("visitSegment marker", marker);
-                // // Debug.debug("visitSegment keepMarker(marker, markers)",
-                // keepMarker(marker, markers));
-                // Debug.debug("visitSegment keepMarker(marker, markers)",
-                // keepMarker(marker, markers));
-
-                if (!keepMarker(marker, markers)) {
-                    return true;
-                }
-
-                switch (marker) {
-                case JpegConstants.JPEG_APP13_MARKER:
-                    // Debug.debug("app 13 segment data", segmentData.length);
-                    result.add(new App13Segment(marker, segmentData));
-                    break;
-                case JpegConstants.JPEG_APP14_MARKER:
-                    result.add(new App14Segment(marker, segmentData));
-                    break;
-                case JpegConstants.JPEG_APP2_MARKER:
-                    result.add(new App2Segment(marker, segmentData));
-                    break;
-                case JpegConstants.JFIF_MARKER:
-                    result.add(new JfifSegment(marker, segmentData));
-                    break;
-                default:
-                    if (Arrays.binarySearch(sofnSegments, marker) >= 0) {
-                        result.add(new SofnSegment(marker, segmentData));
-                    } else if (marker == JpegConstants.DQT_MARKER) {
-                        result.add(new DqtSegment(marker, segmentData));
-                    } else if ((marker >= JpegConstants.JPEG_APP1_MARKER)
-                            && (marker <= JpegConstants.JPEG_APP15_MARKER)) {
-                        result.add(new UnknownSegment(marker, segmentData));
-                    } else if (marker == JpegConstants.COM_MARKER) {
-                        result.add(new ComSegment(marker, segmentData));
-                    }
-                    break;
-                }
-
-                return !returnAfterFirst;
-            }
-        };
-
-        new JpegUtils().traverseJFIF(byteSource, visitor);
-
-        return result;
-    }
-
-    private byte[] assembleSegments(final List<App2Segment> segments) throws ImageReadException {
+    private byte[] assembleSegments(final List<App2Segment> segments) throws ImagingException {
         try {
             return assembleSegments(segments, false);
-        } catch (final ImageReadException e) {
+        } catch (final ImagingException e) {
             return assembleSegments(segments, true);
         }
     }
 
     private byte[] assembleSegments(final List<App2Segment> segments, final boolean startWithZero)
-            throws ImageReadException {
+            throws ImagingException {
         if (segments.isEmpty()) {
-            throw new ImageReadException("No App2 Segments Found.");
+            throw new ImagingException("No App2 Segments Found.");
         }
 
         final int markerCount = segments.get(0).numMarkers;
 
         if (segments.size() != markerCount) {
-            throw new ImageReadException("App2 Segments Missing.  Found: "
+            throw new ImagingException("App2 Segments Missing.  Found: "
                     + segments.size() + ", Expected: " + markerCount + ".");
         }
 
@@ -240,7 +104,7 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
 
             if ((i + offset) != segment.curMarker) {
                 dumpSegments(segments);
-                throw new ImageReadException(
+                throw new ImagingException(
                         "Incoherent App2 Segment Ordering.  i: " + i
                                 + ", segment[" + i + "].curMarker: "
                                 + segment.curMarker + ".");
@@ -248,7 +112,7 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
 
             if (markerCount != segment.numMarkers) {
                 dumpSegments(segments);
-                throw new ImageReadException(
+                throw new ImagingException(
                         "Inconsistent App2 Segment Count info.  markerCount: "
                                 + markerCount + ", segment[" + i
                                 + "].numMarkers: " + segment.numMarkers + ".");
@@ -259,7 +123,7 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
             }
         }
 
-        final byte[] result = new byte[total];
+        final byte[] result = Allocator.byteArray(total);
         int progress = 0;
 
         for (final App2Segment segment : segments) {
@@ -269,6 +133,49 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
 
         return result;
     }
+
+    @Override
+    public boolean dumpImageFile(final PrintWriter pw, final ByteSource byteSource)
+            throws ImagingException, IOException {
+        pw.println("jpeg.dumpImageFile");
+
+        {
+            final ImageInfo imageInfo = getImageInfo(byteSource);
+            if (imageInfo == null) {
+                return false;
+            }
+
+            imageInfo.toString(pw, "");
+        }
+
+        pw.println("");
+
+        {
+            final List<Segment> segments = readSegments(byteSource, null, false);
+
+            if (segments == null) {
+                throw new ImagingException("No Segments Found.");
+            }
+
+            for (int d = 0; d < segments.size(); d++) {
+
+                final Segment segment = segments.get(d);
+
+                final NumberFormat nf = NumberFormat.getIntegerInstance();
+                // this.debugNumber("found, marker: ", marker, 4);
+                pw.println(d + ": marker: "
+                        + Integer.toHexString(segment.marker) + ", "
+                        + segment.getDescription() + " (length: "
+                        + nf.format(segment.length) + ")");
+                segment.dump(pw);
+            }
+
+            pw.println("");
+        }
+
+        return true;
+    }
+
 
     private void dumpSegments(final List<? extends Segment> v) {
         Debug.debug();
@@ -282,9 +189,102 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
         Debug.debug();
     }
 
+    private List<Segment> filterAPP1Segments(final List<Segment> segments) {
+        final List<Segment> result = new ArrayList<>();
+
+        for (final Segment s : segments) {
+            final GenericSegment segment = (GenericSegment) s;
+            if (isExifAPP1Segment(segment)) {
+                result.add(segment);
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    protected String[] getAcceptedExtensions() {
+        return ACCEPTED_EXTENSIONS;
+    }
+
+    @Override
+    protected ImageFormat[] getAcceptedTypes() {
+        return new ImageFormat[] { ImageFormats.JPEG, //
+        };
+    }
+
+    @Override
+    public final BufferedImage getBufferedImage(final ByteSource byteSource,
+            final JpegImagingParameters params) throws ImagingException, IOException {
+        final JpegDecoder jpegDecoder = new JpegDecoder();
+        return jpegDecoder.decode(byteSource);
+    }
+
+    @Override
+    public String getDefaultExtension() {
+        return DEFAULT_EXTENSION;
+    }
+
+    @Override
+    public JpegImagingParameters getDefaultParameters() {
+        return new JpegImagingParameters();
+    }
+
+    public TiffImageMetadata getExifMetadata(final ByteSource byteSource, TiffImagingParameters params)
+            throws ImagingException, IOException {
+        final byte[] bytes = getExifRawData(byteSource);
+        if (null == bytes) {
+            return null;
+        }
+
+        if (params == null) {
+            params = new TiffImagingParameters();
+        }
+        params.setReadThumbnails(Boolean.TRUE);
+
+        return (TiffImageMetadata) new TiffImageParser().getMetadata(bytes, params);
+    }
+
+    public byte[] getExifRawData(final ByteSource byteSource)
+            throws ImagingException, IOException {
+        final List<Segment> segments = readSegments(byteSource,
+                new int[] { JpegConstants.JPEG_APP1_MARKER, }, false);
+
+        if ((segments == null) || (segments.isEmpty())) {
+            return null;
+        }
+
+        final List<Segment> exifSegments = filterAPP1Segments(segments);
+        if (LOGGER.isLoggable(Level.FINEST)) {
+            LOGGER.finest("exif_segments.size" + ": " + exifSegments.size());
+        }
+
+        // Debug.debug("segments", segments);
+        // Debug.debug("exifSegments", exifSegments);
+
+        // TODO: concatenate if multiple segments, need example.
+        if (exifSegments.isEmpty()) {
+            return null;
+        }
+        if (exifSegments.size() > 1) {
+            throw new ImagingException(
+                    "Imaging currently can't parse EXIF metadata split across multiple APP1 segments.  "
+                            + "Please send this image to the Imaging project.");
+        }
+
+        final GenericSegment segment = (GenericSegment) exifSegments.get(0);
+        final byte[] bytes = segment.getSegmentData();
+
+        // byte head[] = readBytearray("exif head", bytes, 0, 6);
+        //
+        // Debug.debug("head", head);
+
+        return remainingBytes("trimmed exif bytes", bytes, 6);
+    }
+
     @Override
     public byte[] getICCProfileBytes(final ByteSource byteSource, final JpegImagingParameters params)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         final List<Segment> segments = readSegments(byteSource,
                 new int[] { JpegConstants.JPEG_APP2_MARKER, }, false);
 
@@ -313,342 +313,8 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
     }
 
     @Override
-    public ImageMetadata getMetadata(final ByteSource byteSource, JpegImagingParameters params)
-            throws ImageReadException, IOException {
-        if (params == null) {
-            params = new JpegImagingParameters();
-        }
-        final TiffImageMetadata exif = getExifMetadata(byteSource, new TiffImagingParameters());
-
-        final JpegPhotoshopMetadata photoshop = getPhotoshopMetadata(byteSource, params);
-
-        if (null == exif && null == photoshop) {
-            return null;
-        }
-
-        return new JpegImageMetadata(photoshop, exif);
-    }
-
-    public static boolean isExifAPP1Segment(final GenericSegment segment) {
-        return startsWith(segment.getSegmentData(), JpegConstants.EXIF_IDENTIFIER_CODE);
-    }
-
-    private List<Segment> filterAPP1Segments(final List<Segment> segments) {
-        final List<Segment> result = new ArrayList<>();
-
-        for (final Segment s : segments) {
-            final GenericSegment segment = (GenericSegment) s;
-            if (isExifAPP1Segment(segment)) {
-                result.add(segment);
-            }
-        }
-
-        return result;
-    }
-
-    public TiffImageMetadata getExifMetadata(final ByteSource byteSource, TiffImagingParameters params)
-            throws ImageReadException, IOException {
-        final byte[] bytes = getExifRawData(byteSource);
-        if (null == bytes) {
-            return null;
-        }
-
-        if (params == null) {
-            params = new TiffImagingParameters();
-        }
-        params.setReadThumbnails(Boolean.TRUE);
-
-        return (TiffImageMetadata) new TiffImageParser().getMetadata(bytes, params);
-    }
-
-    public byte[] getExifRawData(final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        final List<Segment> segments = readSegments(byteSource,
-                new int[] { JpegConstants.JPEG_APP1_MARKER, }, false);
-
-        if ((segments == null) || (segments.isEmpty())) {
-            return null;
-        }
-
-        final List<Segment> exifSegments = filterAPP1Segments(segments);
-        if (LOGGER.isLoggable(Level.FINEST)) {
-            LOGGER.finest("exif_segments.size" + ": " + exifSegments.size());
-        }
-
-        // Debug.debug("segments", segments);
-        // Debug.debug("exifSegments", exifSegments);
-
-        // TODO: concatenate if multiple segments, need example.
-        if (exifSegments.isEmpty()) {
-            return null;
-        }
-        if (exifSegments.size() > 1) {
-            throw new ImageReadException(
-                    "Imaging currently can't parse EXIF metadata split across multiple APP1 segments.  "
-                            + "Please send this image to the Imaging project.");
-        }
-
-        final GenericSegment segment = (GenericSegment) exifSegments.get(0);
-        final byte[] bytes = segment.getSegmentData();
-
-        // byte head[] = readBytearray("exif head", bytes, 0, 6);
-        //
-        // Debug.debug("head", head);
-
-        return remainingBytes("trimmed exif bytes", bytes, 6);
-    }
-
-    public boolean hasExifSegment(final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        final boolean[] result = { false, };
-
-        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
-            // return false to exit before reading image data.
-            @Override
-            public boolean beginSOS() {
-                return false;
-            }
-
-            @Override
-            public void visitSOS(final int marker, final byte[] markerBytes,
-                    final byte[] imageData) {
-                // don't need image data
-            }
-
-            // return false to exit traversal.
-            @Override
-            public boolean visitSegment(final int marker, final byte[] markerBytes,
-                    final int markerLength, final byte[] markerLengthBytes,
-                    final byte[] segmentData) {
-                if (marker == 0xffd9) {
-                    return false;
-                }
-
-                if (marker == JpegConstants.JPEG_APP1_MARKER) {
-                    if (startsWith(segmentData, JpegConstants.EXIF_IDENTIFIER_CODE)) {
-                        result[0] = true;
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        };
-
-        new JpegUtils().traverseJFIF(byteSource, visitor);
-
-        return result[0];
-    }
-
-    public boolean hasIptcSegment(final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        final boolean[] result = { false, };
-
-        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
-            // return false to exit before reading image data.
-            @Override
-            public boolean beginSOS() {
-                return false;
-            }
-
-            @Override
-            public void visitSOS(final int marker, final byte[] markerBytes,
-                    final byte[] imageData) {
-                // don't need image data
-            }
-
-            // return false to exit traversal.
-            @Override
-            public boolean visitSegment(final int marker, final byte[] markerBytes,
-                    final int markerLength, final byte[] markerLengthBytes,
-                    final byte[] segmentData) {
-                if (marker == 0xffd9) {
-                    return false;
-                }
-
-                if (marker == JpegConstants.JPEG_APP13_MARKER) {
-                    if (new IptcParser().isPhotoshopJpegSegment(segmentData)) {
-                        result[0] = true;
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        };
-
-        new JpegUtils().traverseJFIF(byteSource, visitor);
-
-        return result[0];
-    }
-
-    public boolean hasXmpSegment(final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        final boolean[] result = { false, };
-
-        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
-            // return false to exit before reading image data.
-            @Override
-            public boolean beginSOS() {
-                return false;
-            }
-
-            @Override
-            public void visitSOS(final int marker, final byte[] markerBytes,
-                    final byte[] imageData) {
-                // don't need image data
-            }
-
-            // return false to exit traversal.
-            @Override
-            public boolean visitSegment(final int marker, final byte[] markerBytes,
-                    final int markerLength, final byte[] markerLengthBytes,
-                    final byte[] segmentData) {
-                if (marker == 0xffd9) {
-                    return false;
-                }
-
-                if (marker == JpegConstants.JPEG_APP1_MARKER) {
-                    if (new JpegXmpParser().isXmpJpegSegment(segmentData)) {
-                        result[0] = true;
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        };
-        new JpegUtils().traverseJFIF(byteSource, visitor);
-
-        return result[0];
-    }
-
-    /**
-     * Extracts embedded XML metadata as XML string.
-     * <p>
-     *
-     * @param byteSource
-     *            File containing image data.
-     * @param params
-     *            Map of optional parameters, defined in ImagingConstants.
-     * @return Xmp Xml as String, if present. Otherwise, returns null.
-     */
-    @Override
-    public String getXmpXml(final ByteSource byteSource, final XmpImagingParameters params)
-            throws ImageReadException, IOException {
-
-        final List<String> result = new ArrayList<>();
-
-        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
-            // return false to exit before reading image data.
-            @Override
-            public boolean beginSOS() {
-                return false;
-            }
-
-            @Override
-            public void visitSOS(final int marker, final byte[] markerBytes,
-                    final byte[] imageData) {
-                // don't need image data
-            }
-
-            // return false to exit traversal.
-            @Override
-            public boolean visitSegment(final int marker, final byte[] markerBytes,
-                    final int markerLength, final byte[] markerLengthBytes,
-                    final byte[] segmentData) throws ImageReadException {
-                if (marker == 0xffd9) {
-                    return false;
-                }
-
-                if (marker == JpegConstants.JPEG_APP1_MARKER) {
-                    if (new JpegXmpParser().isXmpJpegSegment(segmentData)) {
-                        result.add(new JpegXmpParser().parseXmpJpegSegment(segmentData));
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        };
-        new JpegUtils().traverseJFIF(byteSource, visitor);
-
-        if (result.isEmpty()) {
-            return null;
-        }
-        if (result.size() > 1) {
-            throw new ImageReadException(
-                    "Jpeg file contains more than one XMP segment.");
-        }
-        return result.get(0);
-    }
-
-    public JpegPhotoshopMetadata getPhotoshopMetadata(final ByteSource byteSource,
-            final JpegImagingParameters params) throws ImageReadException, IOException {
-        final List<Segment> segments = readSegments(byteSource,
-                new int[] { JpegConstants.JPEG_APP13_MARKER, }, false);
-
-        if ((segments == null) || (segments.isEmpty())) {
-            return null;
-        }
-
-        PhotoshopApp13Data photoshopApp13Data = null;
-
-        for (final Segment s : segments) {
-            final App13Segment segment = (App13Segment) s;
-
-            final PhotoshopApp13Data data = segment.parsePhotoshopSegment(params);
-            if (data != null) {
-                if (photoshopApp13Data != null) {
-                    throw new ImageReadException("Jpeg contains more than one Photoshop App13 segment.");
-                }
-                photoshopApp13Data = data;
-            }
-        }
-
-        if (null == photoshopApp13Data) {
-            return null;
-        }
-        return new JpegPhotoshopMetadata(photoshopApp13Data);
-    }
-
-    @Override
-    public Dimension getImageSize(final ByteSource byteSource, final JpegImagingParameters params)
-            throws ImageReadException, IOException {
-        final List<Segment> segments = readSegments(byteSource, new int[] {
-                // kJFIFMarker,
-                JpegConstants.SOF0_MARKER,
-                JpegConstants.SOF1_MARKER,
-                JpegConstants.SOF2_MARKER,
-                JpegConstants.SOF3_MARKER,
-                JpegConstants.SOF5_MARKER,
-                JpegConstants.SOF6_MARKER,
-                JpegConstants.SOF7_MARKER,
-                JpegConstants.SOF9_MARKER,
-                JpegConstants.SOF10_MARKER,
-                JpegConstants.SOF11_MARKER,
-                JpegConstants.SOF13_MARKER,
-                JpegConstants.SOF14_MARKER,
-                JpegConstants.SOF15_MARKER,
-
-        }, true);
-
-        if ((segments == null) || (segments.isEmpty())) {
-            throw new ImageReadException("No JFIF Data Found.");
-        }
-
-        if (segments.size() > 1) {
-            throw new ImageReadException("Redundant JFIF Data Found.");
-        }
-
-        final SofnSegment fSOFNSegment = (SofnSegment) segments.get(0);
-
-        return new Dimension(fSOFNSegment.width, fSOFNSegment.height);
-    }
-
-    @Override
     public ImageInfo getImageInfo(final ByteSource byteSource, final JpegImagingParameters params)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         // List allSegments = readSegments(byteSource, null, false);
 
         final List<Segment> SOF_segments = readSegments(byteSource, new int[] {
@@ -671,7 +337,7 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
         }, false);
 
         if (SOF_segments == null) {
-            throw new ImageReadException("No SOFN Data Found.");
+            throw new ImagingException("No SOFN Data Found.");
         }
 
         // if (SOF_segments.size() != 1)
@@ -686,7 +352,7 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
         // SOFNmarkers);
 
         if (fSOFNSegment == null) {
-            throw new ImageReadException("No SOFN Data Found.");
+            throw new ImagingException("No SOFN Data Found.");
         }
 
         final int width = fSOFNSegment.width;
@@ -793,7 +459,7 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
 
         final List<Segment> commentSegments = readSegments(byteSource,
                 new int[] { JpegConstants.COM_MARKER}, false);
-        final List<String> comments = new ArrayList<>(commentSegments.size());
+        final List<String> comments = Allocator.arrayList(commentSegments.size());
         for (final Segment commentSegment : commentSegments) {
             final ComSegment comSegment = (ComSegment) commentSegment;
             comments.add(new String(comSegment.getComment(), StandardCharsets.UTF_8));
@@ -861,16 +527,22 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
                 boolean haveOther = false;
                 for (final SofnSegment.Component component : fSOFNSegment.getComponents()) {
                     final int id = component.componentIdentifier;
-                    if (id == 1) {
+                    switch (id) {
+                    case 1:
                         have1 = true;
-                    } else if (id == 2) {
+                        break;
+                    case 2:
                         have2 = true;
-                    } else if (id == 3) {
+                        break;
+                    case 3:
                         have3 = true;
-                    } else if (id == 4) {
+                        break;
+                    case 4:
                         have4 = true;
-                    } else {
+                        break;
+                    default:
                         haveOther = true;
+                        break;
                     }
                 }
                 if (numberOfComponents == 3 && have1 && have2 && have3 && !have4 && !haveOther) {
@@ -888,20 +560,30 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
                     boolean haveY = false;
                     for (final SofnSegment.Component component : fSOFNSegment.getComponents()) {
                         final int id = component.componentIdentifier;
-                        if (id == 'R') {
+                        switch (id) {
+                        case 'R':
                             haveR = true;
-                        } else if (id == 'G') {
+                            break;
+                        case 'G':
                             haveG = true;
-                        } else if (id == 'B') {
+                            break;
+                        case 'B':
                             haveB = true;
-                        } else if (id == 'A') {
+                            break;
+                        case 'A':
                             haveA = true;
-                        } else if (id == 'C') {
+                            break;
+                        case 'C':
                             haveC = true;
-                        } else if (id == 'c') {
+                            break;
+                        case 'c':
                             havec = true;
-                        } else if (id == 'Y') {
+                            break;
+                        case 'Y':
                             haveY = true;
+                            break;
+                        default:
+                            break;
                         }
                     }
                     if (haveR && haveG && haveB && !haveA && !haveC && !havec && !haveY) {
@@ -966,44 +648,374 @@ public class JpegImageParser extends ImageParser<JpegImagingParameters> implemen
     }
 
     @Override
-    public boolean dumpImageFile(final PrintWriter pw, final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        pw.println("jpeg.dumpImageFile");
+    public Dimension getImageSize(final ByteSource byteSource, final JpegImagingParameters params)
+            throws ImagingException, IOException {
+        final List<Segment> segments = readSegments(byteSource, new int[] {
+                // kJFIFMarker,
+                JpegConstants.SOF0_MARKER,
+                JpegConstants.SOF1_MARKER,
+                JpegConstants.SOF2_MARKER,
+                JpegConstants.SOF3_MARKER,
+                JpegConstants.SOF5_MARKER,
+                JpegConstants.SOF6_MARKER,
+                JpegConstants.SOF7_MARKER,
+                JpegConstants.SOF9_MARKER,
+                JpegConstants.SOF10_MARKER,
+                JpegConstants.SOF11_MARKER,
+                JpegConstants.SOF13_MARKER,
+                JpegConstants.SOF14_MARKER,
+                JpegConstants.SOF15_MARKER,
 
-        {
-            final ImageInfo imageInfo = getImageInfo(byteSource);
-            if (imageInfo == null) {
+        }, true);
+
+        if ((segments == null) || (segments.isEmpty())) {
+            throw new ImagingException("No JFIF Data Found.");
+        }
+
+        if (segments.size() > 1) {
+            throw new ImagingException("Redundant JFIF Data Found.");
+        }
+
+        final SofnSegment fSOFNSegment = (SofnSegment) segments.get(0);
+
+        return new Dimension(fSOFNSegment.width, fSOFNSegment.height);
+    }
+
+    @Override
+    public ImageMetadata getMetadata(final ByteSource byteSource, JpegImagingParameters params)
+            throws ImagingException, IOException {
+        if (params == null) {
+            params = new JpegImagingParameters();
+        }
+        final TiffImageMetadata exif = getExifMetadata(byteSource, new TiffImagingParameters());
+
+        final JpegPhotoshopMetadata photoshop = getPhotoshopMetadata(byteSource, params);
+
+        if (null == exif && null == photoshop) {
+            return null;
+        }
+
+        return new JpegImageMetadata(photoshop, exif);
+    }
+
+    @Override
+    public String getName() {
+        return "Jpeg-Custom";
+    }
+
+    public JpegPhotoshopMetadata getPhotoshopMetadata(final ByteSource byteSource,
+            final JpegImagingParameters params) throws ImagingException, IOException {
+        final List<Segment> segments = readSegments(byteSource,
+                new int[] { JpegConstants.JPEG_APP13_MARKER, }, false);
+
+        if ((segments == null) || (segments.isEmpty())) {
+            return null;
+        }
+
+        PhotoshopApp13Data photoshopApp13Data = null;
+
+        for (final Segment s : segments) {
+            final App13Segment segment = (App13Segment) s;
+
+            final PhotoshopApp13Data data = segment.parsePhotoshopSegment(params);
+            if (data != null) {
+                if (photoshopApp13Data != null) {
+                    throw new ImagingException("JPEG contains more than one Photoshop App13 segment.");
+                }
+                photoshopApp13Data = data;
+            }
+        }
+
+        if (null == photoshopApp13Data) {
+            return null;
+        }
+        return new JpegPhotoshopMetadata(photoshopApp13Data);
+    }
+
+    /**
+     * Extracts embedded XML metadata as XML string.
+     * <p>
+     *
+     * @param byteSource
+     *            File containing image data.
+     * @param params
+     *            Map of optional parameters, defined in ImagingConstants.
+     * @return Xmp Xml as String, if present. Otherwise, returns null.
+     */
+    @Override
+    public String getXmpXml(final ByteSource byteSource, final XmpImagingParameters<JpegImagingParameters> params)
+            throws ImagingException, IOException {
+
+        final List<String> result = new ArrayList<>();
+
+        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
+            // return false to exit before reading image data.
+            @Override
+            public boolean beginSOS() {
                 return false;
             }
 
-            imageInfo.toString(pw, "");
-        }
+            // return false to exit traversal.
+            @Override
+            public boolean visitSegment(final int marker, final byte[] markerBytes,
+                    final int markerLength, final byte[] markerLengthBytes,
+                    final byte[] segmentData) throws ImagingException {
+                if (marker == 0xffd9) {
+                    return false;
+                }
 
-        pw.println("");
+                if (marker == JpegConstants.JPEG_APP1_MARKER) {
+                    if (new JpegXmpParser().isXmpJpegSegment(segmentData)) {
+                        result.add(new JpegXmpParser().parseXmpJpegSegment(segmentData));
+                        return false;
+                    }
+                }
 
-        {
-            final List<Segment> segments = readSegments(byteSource, null, false);
-
-            if (segments == null) {
-                throw new ImageReadException("No Segments Found.");
+                return true;
             }
 
-            for (int d = 0; d < segments.size(); d++) {
+            @Override
+            public void visitSOS(final int marker, final byte[] markerBytes,
+                    final byte[] imageData) {
+                // don't need image data
+            }
+        };
+        new JpegUtils().traverseJFIF(byteSource, visitor);
 
-                final Segment segment = segments.get(d);
+        if (result.isEmpty()) {
+            return null;
+        }
+        if (result.size() > 1) {
+            throw new ImagingException(
+                    "JPEG file contains more than one XMP segment.");
+        }
+        return result.get(0);
+    }
 
-                final NumberFormat nf = NumberFormat.getIntegerInstance();
-                // this.debugNumber("found, marker: ", marker, 4);
-                pw.println(d + ": marker: "
-                        + Integer.toHexString(segment.marker) + ", "
-                        + segment.getDescription() + " (length: "
-                        + nf.format(segment.length) + ")");
-                segment.dump(pw);
+    public boolean hasExifSegment(final ByteSource byteSource)
+            throws ImagingException, IOException {
+        final boolean[] result = { false, };
+
+        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
+            // return false to exit before reading image data.
+            @Override
+            public boolean beginSOS() {
+                return false;
             }
 
-            pw.println("");
+            // return false to exit traversal.
+            @Override
+            public boolean visitSegment(final int marker, final byte[] markerBytes,
+                    final int markerLength, final byte[] markerLengthBytes,
+                    final byte[] segmentData) {
+                if (marker == 0xffd9) {
+                    return false;
+                }
+
+                if (marker == JpegConstants.JPEG_APP1_MARKER) {
+                    if (startsWith(segmentData, JpegConstants.EXIF_IDENTIFIER_CODE)) {
+                        result[0] = true;
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            @Override
+            public void visitSOS(final int marker, final byte[] markerBytes,
+                    final byte[] imageData) {
+                // don't need image data
+            }
+        };
+
+        new JpegUtils().traverseJFIF(byteSource, visitor);
+
+        return result[0];
+    }
+
+    public boolean hasIptcSegment(final ByteSource byteSource)
+            throws ImagingException, IOException {
+        final boolean[] result = { false, };
+
+        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
+            // return false to exit before reading image data.
+            @Override
+            public boolean beginSOS() {
+                return false;
+            }
+
+            // return false to exit traversal.
+            @Override
+            public boolean visitSegment(final int marker, final byte[] markerBytes,
+                    final int markerLength, final byte[] markerLengthBytes,
+                    final byte[] segmentData) {
+                if (marker == 0xffd9) {
+                    return false;
+                }
+
+                if (marker == JpegConstants.JPEG_APP13_MARKER) {
+                    if (new IptcParser().isPhotoshopJpegSegment(segmentData)) {
+                        result[0] = true;
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            @Override
+            public void visitSOS(final int marker, final byte[] markerBytes,
+                    final byte[] imageData) {
+                // don't need image data
+            }
+        };
+
+        new JpegUtils().traverseJFIF(byteSource, visitor);
+
+        return result[0];
+    }
+
+    public boolean hasXmpSegment(final ByteSource byteSource)
+            throws ImagingException, IOException {
+        final boolean[] result = { false, };
+
+        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
+            // return false to exit before reading image data.
+            @Override
+            public boolean beginSOS() {
+                return false;
+            }
+
+            // return false to exit traversal.
+            @Override
+            public boolean visitSegment(final int marker, final byte[] markerBytes,
+                    final int markerLength, final byte[] markerLengthBytes,
+                    final byte[] segmentData) {
+                if (marker == 0xffd9) {
+                    return false;
+                }
+
+                if (marker == JpegConstants.JPEG_APP1_MARKER) {
+                    if (new JpegXmpParser().isXmpJpegSegment(segmentData)) {
+                        result[0] = true;
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
+            @Override
+            public void visitSOS(final int marker, final byte[] markerBytes,
+                    final byte[] imageData) {
+                // don't need image data
+            }
+        };
+        new JpegUtils().traverseJFIF(byteSource, visitor);
+
+        return result[0];
+    }
+
+    private boolean keepMarker(final int marker, final int[] markers) {
+        if (markers == null) {
+            return true;
         }
 
-        return true;
+        for (final int marker2 : markers) {
+            if (marker2 == marker) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public List<Segment> readSegments(final ByteSource byteSource, final int[] markers, final boolean returnAfterFirst) throws ImagingException, IOException {
+        final List<Segment> result = new ArrayList<>();
+        final int[] sofnSegments = {
+                // kJFIFMarker,
+                JpegConstants.SOF0_MARKER,
+                JpegConstants.SOF1_MARKER,
+                JpegConstants.SOF2_MARKER,
+                JpegConstants.SOF3_MARKER,
+                JpegConstants.SOF5_MARKER,
+                JpegConstants.SOF6_MARKER,
+                JpegConstants.SOF7_MARKER,
+                JpegConstants.SOF9_MARKER,
+                JpegConstants.SOF10_MARKER,
+                JpegConstants.SOF11_MARKER,
+                JpegConstants.SOF13_MARKER,
+                JpegConstants.SOF14_MARKER,
+                JpegConstants.SOF15_MARKER,
+        };
+
+        final JpegUtils.Visitor visitor = new JpegUtils.Visitor() {
+            // return false to exit before reading image data.
+            @Override
+            public boolean beginSOS() {
+                return false;
+            }
+
+            // return false to exit traversal.
+            @Override
+            public boolean visitSegment(final int marker, final byte[] markerBytes,
+                    final int markerLength, final byte[] markerLengthBytes,
+                    final byte[] segmentData) throws ImagingException, IOException {
+                if (marker == JpegConstants.EOI_MARKER) {
+                    return false;
+                }
+
+                // Debug.debug("visitSegment marker", marker);
+                // // Debug.debug("visitSegment keepMarker(marker, markers)",
+                // keepMarker(marker, markers));
+                // Debug.debug("visitSegment keepMarker(marker, markers)",
+                // keepMarker(marker, markers));
+
+                if (!keepMarker(marker, markers)) {
+                    return true;
+                }
+
+                switch (marker) {
+                case JpegConstants.JPEG_APP13_MARKER:
+                    // Debug.debug("app 13 segment data", segmentData.length);
+                    result.add(new App13Segment(marker, segmentData));
+                    break;
+                case JpegConstants.JPEG_APP14_MARKER:
+                    result.add(new App14Segment(marker, segmentData));
+                    break;
+                case JpegConstants.JPEG_APP2_MARKER:
+                    result.add(new App2Segment(marker, segmentData));
+                    break;
+                case JpegConstants.JFIF_MARKER:
+                    result.add(new JfifSegment(marker, segmentData));
+                    break;
+                default:
+                    if (Arrays.binarySearch(sofnSegments, marker) >= 0) {
+                        result.add(new SofnSegment(marker, segmentData));
+                    } else if (marker == JpegConstants.DQT_MARKER) {
+                        result.add(new DqtSegment(marker, segmentData));
+                    } else if ((marker >= JpegConstants.JPEG_APP1_MARKER)
+                            && (marker <= JpegConstants.JPEG_APP15_MARKER)) {
+                        result.add(new UnknownSegment(marker, segmentData));
+                    } else if (marker == JpegConstants.COM_MARKER) {
+                        result.add(new ComSegment(marker, segmentData));
+                    }
+                    break;
+                }
+
+                return !returnAfterFirst;
+            }
+
+            @Override
+            public void visitSOS(final int marker, final byte[] markerBytes,
+                    final byte[] imageData) {
+                // don't need image data
+            }
+        };
+
+        new JpegUtils().traverseJFIF(byteSource, visitor);
+
+        return result;
     }
 }

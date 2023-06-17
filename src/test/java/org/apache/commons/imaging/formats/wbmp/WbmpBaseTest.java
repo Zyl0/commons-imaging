@@ -18,17 +18,17 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class WbmpBaseTest extends ImagingTest {
+    private static final ImageFilter IMAGE_FILTER = WbmpBaseTest::isWbmp;
+
     private static boolean isWbmp(final File file) {
         return file.getName().toLowerCase().endsWith(".wbmp");
     }
 
-    private static final ImageFilter IMAGE_FILTER = WbmpBaseTest::isWbmp;
-
-    protected List<File> getWbmpImages() throws IOException, ImageReadException {
+    protected List<File> getWbmpImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 }

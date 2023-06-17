@@ -20,10 +20,10 @@ import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.DE
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_CCITT_1D;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_CCITT_GROUP_3;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_CCITT_GROUP_4;
+import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_DEFLATE_ADOBE;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_LZW;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_PACKBITS;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_UNCOMPRESSED;
-import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_DEFLATE_ADOBE;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_FLAG_T6_OPTIONS_UNCOMPRESSED_MODE;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_HEADER_SIZE;
 
@@ -41,13 +41,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.PixelDensity;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.BinaryOutputStream;
 import org.apache.commons.imaging.common.PackBits;
 import org.apache.commons.imaging.common.RationalNumber;
-import org.apache.commons.imaging.common.itu_t4.T4AndT6Compression;
-import org.apache.commons.imaging.common.mylzw.MyLzwCompressor;
 import org.apache.commons.imaging.common.ZlibDeflate;
 import org.apache.commons.imaging.formats.tiff.TiffElement;
 import org.apache.commons.imaging.formats.tiff.TiffImageData;
@@ -55,8 +54,16 @@ import org.apache.commons.imaging.formats.tiff.TiffImagingParameters;
 import org.apache.commons.imaging.formats.tiff.constants.ExifTagConstants;
 import org.apache.commons.imaging.formats.tiff.constants.TiffDirectoryConstants;
 import org.apache.commons.imaging.formats.tiff.constants.TiffTagConstants;
+import org.apache.commons.imaging.formats.tiff.itu_t4.T4AndT6Compression;
+import org.apache.commons.imaging.mylzw.MyLzwCompressor;
 
 public abstract class TiffImageWriterBase {
+
+    private static final int MAX_PIXELS_FOR_RGB = 1024*1024;
+
+    protected static int imageDataPaddingLength(final int dataLength) {
+        return (4 - (dataLength % 4)) % 4;
+    }
 
     protected final ByteOrder byteOrder;
 
@@ -68,19 +75,147 @@ public abstract class TiffImageWriterBase {
         this.byteOrder = byteOrder;
     }
 
-    protected static int imageDataPaddingLength(final int dataLength) {
-        return (4 - (dataLength % 4)) % 4;
+    private void applyPredictor(final int width, final int bytesPerSample, final byte[] b) {
+        final int nBytesPerRow = bytesPerSample * width;
+        final int nRows = b.length / nBytesPerRow;
+        for (int iRow = 0; iRow < nRows; iRow++) {
+            final int offset = iRow * nBytesPerRow;
+            for (int i = nBytesPerRow - 1; i >= bytesPerSample; i--) {
+                b[offset + i] -= b[offset + i - bytesPerSample];
+            }
+        }
     }
 
-    public abstract void write(OutputStream os, TiffOutputSet outputSet)
-            throws IOException, ImageWriteException;
+    /**
+     * Check an image to see if any of its pixels are non-opaque.
+     * @param src a valid image
+     * @return true if at least one non-opaque pixel is found.
+     */
+    private boolean checkForActualAlpha(final BufferedImage src) {
+        // to conserve memory, very large images may be read
+        // in pieces.
+        final int width = src.getWidth();
+        final int height = src.getHeight();
+        int nRowsPerRead = MAX_PIXELS_FOR_RGB / width;
+        if (nRowsPerRead < 1) {
+            nRowsPerRead = 1;
+        }
+        final int nReads = (height + nRowsPerRead - 1) / nRowsPerRead;
+        final int[] argb = Allocator.intArray(nRowsPerRead * width);
+        for (int iRead = 0; iRead < nReads; iRead++) {
+            final int i0 = iRead * nRowsPerRead;
+            final int i1 = i0 + nRowsPerRead > height ? height : i0 + nRowsPerRead;
+            src.getRGB(0, i0, width, i1 - i0, argb, 0, width);
+            final int n = (i1 - i0) * width;
+            for (int i = 0; i < n; i++) {
+                if ((argb[i] & 0xff000000) != 0xff000000) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    private void combineUserExifIntoFinalExif(final TiffOutputSet userExif,
+            final TiffOutputSet outputSet) throws ImagingException {
+        final List<TiffOutputDirectory> outputDirectories = outputSet.getDirectories();
+        outputDirectories.sort(TiffOutputDirectory.COMPARATOR);
+        for (final TiffOutputDirectory userDirectory : userExif.getDirectories()) {
+            final int location = Collections.binarySearch(outputDirectories,
+                    userDirectory, TiffOutputDirectory.COMPARATOR);
+            if (location < 0) {
+                outputSet.addDirectory(userDirectory);
+            } else {
+                final TiffOutputDirectory outputDirectory = outputDirectories.get(location);
+                for (final TiffOutputField userField : userDirectory) {
+                    if (outputDirectory.findField(userField.tagInfo) == null) {
+                        outputDirectory.add(userField);
+                    }
+                }
+            }
+        }
+    }
+
+    private byte[][] getStrips(final BufferedImage src, final int samplesPerPixel,
+            final int bitsPerSample, final int rowsPerStrip) {
+        final int width = src.getWidth();
+        final int height = src.getHeight();
+
+        final int stripCount = (height + rowsPerStrip - 1) / rowsPerStrip;
+
+        byte[][] result;
+        { // Write Strips
+            result = new byte[Allocator.check(stripCount)][];
+
+            int remainingRows = height;
+
+            for (int i = 0; i < stripCount; i++) {
+                final int rowsInStrip = Math.min(rowsPerStrip, remainingRows);
+                remainingRows -= rowsInStrip;
+
+                final int bitsInRow = bitsPerSample * samplesPerPixel * width;
+                final int bytesPerRow = (bitsInRow + 7) / 8;
+                final int bytesInStrip = rowsInStrip * bytesPerRow;
+
+                final byte[] uncompressed = Allocator.byteArray(bytesInStrip);
+
+                int counter = 0;
+                int y = i * rowsPerStrip;
+                final int stop = i * rowsPerStrip + rowsPerStrip;
+
+                for (; (y < height) && (y < stop); y++) {
+                    int bitCache = 0;
+                    int bitsInCache = 0;
+                    for (int x = 0; x < width; x++) {
+                        final int rgb = src.getRGB(x, y);
+                        final int red = 0xff & (rgb >> 16);
+                        final int green = 0xff & (rgb >> 8);
+                        final int blue = 0xff & (rgb >> 0);
+
+                        if (bitsPerSample == 1) {
+                            int sample = (red + green + blue) / 3;
+                            if (sample > 127) {
+                                sample = 0;
+                            } else {
+                                sample = 1;
+                            }
+                            bitCache <<= 1;
+                            bitCache |= sample;
+                            bitsInCache++;
+                            if (bitsInCache == 8) {
+                                uncompressed[counter++] = (byte) bitCache;
+                                bitCache = 0;
+                                bitsInCache = 0;
+                            }
+                        } else if(samplesPerPixel==4){
+                            uncompressed[counter++] = (byte) red;
+                            uncompressed[counter++] = (byte) green;
+                            uncompressed[counter++] = (byte) blue;
+                            uncompressed[counter++] = (byte) (rgb>>24);
+                        }else {
+                            // samples per pixel is 3
+                            uncompressed[counter++] = (byte) red;
+                            uncompressed[counter++] = (byte) green;
+                            uncompressed[counter++] = (byte) blue;
+                        }
+                    }
+                    if (bitsInCache > 0) {
+                        bitCache <<= (8 - bitsInCache);
+                        uncompressed[counter++] = (byte) bitCache;
+                    }
+                }
+
+                result[i] = uncompressed;
+            }
+
+        }
+
+        return result;
+    }
 
     protected TiffOutputSummary validateDirectories(final TiffOutputSet outputSet)
-            throws ImageWriteException {
-        final List<TiffOutputDirectory> directories = outputSet.getDirectories();
-
-        if (directories.isEmpty()) {
-            throw new ImageWriteException("No directories.");
+            throws ImagingException {
+        if (outputSet.isEmpty()) {
+            throw new ImagingException("No directories.");
         }
 
         TiffOutputDirectory exifDirectory = null;
@@ -92,8 +227,8 @@ public abstract class TiffImageWriterBase {
 
         final List<Integer> directoryIndices = new ArrayList<>();
         final Map<Integer, TiffOutputDirectory> directoryTypeMap = new HashMap<>();
-        for (final TiffOutputDirectory directory : directories) {
-            final int dirType = directory.type;
+        for (final TiffOutputDirectory directory : outputSet) {
+            final int dirType = directory.getType();
             directoryTypeMap.put(dirType, directory);
             // Debug.debug("validating dirType", dirType + " ("
             // + directory.getFields().size() + " fields)");
@@ -102,7 +237,7 @@ public abstract class TiffImageWriterBase {
                 switch (dirType) {
                     case TiffDirectoryConstants.DIRECTORY_TYPE_EXIF:
                         if (exifDirectory != null) {
-                            throw new ImageWriteException(
+                            throw new ImagingException(
                                     "More than one EXIF directory.");
                         }
                         exifDirectory = directory;
@@ -110,7 +245,7 @@ public abstract class TiffImageWriterBase {
 
                     case TiffDirectoryConstants.DIRECTORY_TYPE_GPS:
                         if (gpsDirectory != null) {
-                            throw new ImageWriteException(
+                            throw new ImagingException(
                                     "More than one GPS directory.");
                         }
                         gpsDirectory = directory;
@@ -118,18 +253,18 @@ public abstract class TiffImageWriterBase {
 
                     case TiffDirectoryConstants.DIRECTORY_TYPE_INTEROPERABILITY:
                         if (interoperabilityDirectory != null) {
-                            throw new ImageWriteException(
+                            throw new ImagingException(
                                     "More than one Interoperability directory.");
                         }
                         interoperabilityDirectory = directory;
                         break;
                     default:
-                        throw new ImageWriteException("Unknown directory: "
+                        throw new ImagingException("Unknown directory: "
                                 + dirType);
                 }
             } else {
                 if (directoryIndices.contains(dirType)) {
-                    throw new ImageWriteException(
+                    throw new ImagingException(
                             "More than one directory with index: " + dirType
                                     + ".");
                 }
@@ -138,10 +273,9 @@ public abstract class TiffImageWriterBase {
             }
 
             final HashSet<Integer> fieldTags = new HashSet<>();
-            final List<TiffOutputField> fields = directory.getFields();
-            for (final TiffOutputField field : fields) {
+            for (final TiffOutputField field : directory) {
                 if (fieldTags.contains(field.tag)) {
-                    throw new ImageWriteException("Tag ("
+                    throw new ImagingException("Tag ("
                             + field.tagInfo.getDescription()
                             + ") appears twice in directory.");
                 }
@@ -149,19 +283,19 @@ public abstract class TiffImageWriterBase {
 
                 if (field.tag == ExifTagConstants.EXIF_TAG_EXIF_OFFSET.tag) {
                     if (exifDirectoryOffsetField != null) {
-                        throw new ImageWriteException(
+                        throw new ImagingException(
                                 "More than one Exif directory offset field.");
                     }
                     exifDirectoryOffsetField = field;
                 } else if (field.tag == ExifTagConstants.EXIF_TAG_INTEROP_OFFSET.tag) {
                     if (interoperabilityDirectoryOffsetField != null) {
-                        throw new ImageWriteException(
+                        throw new ImagingException(
                                 "More than one Interoperability directory offset field.");
                     }
                     interoperabilityDirectoryOffsetField = field;
                 } else if (field.tag == ExifTagConstants.EXIF_TAG_GPSINFO.tag) {
                     if (gpsDirectoryOffsetField != null) {
-                        throw new ImageWriteException(
+                        throw new ImagingException(
                                 "More than one GPS directory offset field.");
                     }
                     gpsDirectoryOffsetField = field;
@@ -171,7 +305,7 @@ public abstract class TiffImageWriterBase {
         }
 
         if (directoryIndices.isEmpty()) {
-            throw new ImageWriteException("Missing root directory.");
+            throw new ImagingException("Missing root directory.");
         }
 
         // "normal" TIFF directories should have continous indices starting with
@@ -182,7 +316,7 @@ public abstract class TiffImageWriterBase {
         for (int i = 0; i < directoryIndices.size(); i++) {
             final Integer index = directoryIndices.get(i);
             if (index != i) {
-                throw new ImageWriteException("Missing directory: " + i + ".");
+                throw new ImagingException("Missing directory: " + i + ".");
             }
 
             // set up chain of directory references for "normal" directories.
@@ -203,7 +337,7 @@ public abstract class TiffImageWriterBase {
         if (interoperabilityDirectory == null
                 && interoperabilityDirectoryOffsetField != null) {
             // perhaps we should just discard field?
-            throw new ImageWriteException(
+            throw new ImagingException(
                     "Output set has Interoperability Directory Offset field, but no Interoperability Directory");
         }
         if (interoperabilityDirectory != null) {
@@ -226,7 +360,7 @@ public abstract class TiffImageWriterBase {
         // make sure offset fields and offset'd directories correspond.
         if (exifDirectory == null && exifDirectoryOffsetField != null) {
             // perhaps we should just discard field?
-            throw new ImageWriteException(
+            throw new ImagingException(
                     "Output set has Exif Directory Offset field, but no Exif Directory");
         }
         if (exifDirectory != null) {
@@ -241,7 +375,7 @@ public abstract class TiffImageWriterBase {
 
         if (gpsDirectory == null && gpsDirectoryOffsetField != null) {
             // perhaps we should just discard field?
-            throw new ImageWriteException(
+            throw new ImagingException(
                     "Output set has GPS Directory Offset field, but no GPS Directory");
         }
         if (gpsDirectory != null) {
@@ -259,50 +393,11 @@ public abstract class TiffImageWriterBase {
         // Debug.debug();
     }
 
-    private static final int MAX_PIXELS_FOR_RGB = 1024*1024;
-    /**
-     * Check an image to see if any of its pixels are non-opaque.
-     * @param src a valid image
-     * @return true if at least one non-opaque pixel is found.
-     */
-    private boolean checkForActualAlpha(final BufferedImage src){
-        // to conserve memory, very large images may be read
-        // in pieces.
-        final int width = src.getWidth();
-        final int height = src.getHeight();
-        int nRowsPerRead = MAX_PIXELS_FOR_RGB/width;
-        if(nRowsPerRead<1){
-            nRowsPerRead = 1;
-        }
-        final int nReads = (height+nRowsPerRead-1)/nRowsPerRead;
-        final int []argb = new int[nRowsPerRead*width];
-        for(int iRead=0; iRead<nReads; iRead++){
-            final int i0 = iRead*nRowsPerRead;
-            final int i1 = i0+nRowsPerRead>height? height: i0+nRowsPerRead;
-            src.getRGB(0, i0, width, i1-i0, argb, 0, width);
-            final int n = (i1-i0)*width;
-            for(int i=0; i<n; i++){
-                if((argb[i]&0xff000000)!=0xff000000){
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    private void applyPredictor(final int width, final int bytesPerSample, final byte[] b) {
-        final int nBytesPerRow = bytesPerSample * width;
-        final int nRows = b.length / nBytesPerRow;
-        for (int iRow = 0; iRow < nRows; iRow++) {
-            final int offset = iRow * nBytesPerRow;
-            for (int i = nBytesPerRow - 1; i >= bytesPerSample; i--) {
-                b[offset + i] -= b[offset + i - bytesPerSample];
-            }
-        }
-    }
+    public abstract void write(OutputStream os, TiffOutputSet outputSet)
+            throws IOException, ImagingException;
 
     public void writeImage(final BufferedImage src, final OutputStream os, final TiffImagingParameters params)
-            throws ImageWriteException, IOException {
+            throws ImagingException, IOException {
         final TiffOutputSet userExif = params.getOutputSet();
 
         final String xmpXml = params.getXmpXml();
@@ -346,7 +441,7 @@ public abstract class TiffImageWriterBase {
             final Integer stripSizeInBytes = params.getLzwCompressionBlockSize();
             if (stripSizeInBytes != null) {
                 if (stripSizeInBytes < 8000) {
-                    throw new ImageWriteException(
+                    throw new ImagingException(
                             "Block size parameter " + stripSizeInBytes
                             + " is less than 8000 minimum");
                 }
@@ -382,11 +477,13 @@ public abstract class TiffImageWriterBase {
 
         int t4Options = 0;
         int t6Options = 0;
-        if (compression == TIFF_COMPRESSION_CCITT_1D) {
+        switch (compression) {
+        case TIFF_COMPRESSION_CCITT_1D:
             for (int i = 0; i < strips.length; i++) {
                 strips[i] = T4AndT6Compression.compressModifiedHuffman(strips[i], width, strips[i].length / ((width + 7) / 8));
             }
-        } else if (compression == TIFF_COMPRESSION_CCITT_GROUP_3) {
+            break;
+        case TIFF_COMPRESSION_CCITT_GROUP_3: {
             final Integer t4Parameter = params.getT4Options();
             if (t4Parameter != null) {
                 t4Options = t4Parameter.intValue();
@@ -395,7 +492,7 @@ public abstract class TiffImageWriterBase {
             final boolean is2D = (t4Options & 1) != 0;
             final boolean usesUncompressedMode = (t4Options & 2) != 0;
             if (usesUncompressedMode) {
-                throw new ImageWriteException(
+                throw new ImagingException(
                         "T.4 compression with the uncompressed mode extension is not yet supported");
             }
             final boolean hasFillBitsBeforeEOL = (t4Options & 4) != 0;
@@ -410,7 +507,9 @@ public abstract class TiffImageWriterBase {
                             hasFillBitsBeforeEOL);
                 }
             }
-        } else if (compression == TIFF_COMPRESSION_CCITT_GROUP_4) {
+            break;
+        }
+        case TIFF_COMPRESSION_CCITT_GROUP_4: {
             final Integer t6Parameter = params.getT6Options();
             if (t6Parameter != null) {
                 t6Options = t6Parameter.intValue();
@@ -418,17 +517,20 @@ public abstract class TiffImageWriterBase {
             t6Options &= 0x4;
             final boolean usesUncompressedMode = (t6Options & TIFF_FLAG_T6_OPTIONS_UNCOMPRESSED_MODE) != 0;
             if (usesUncompressedMode) {
-                throw new ImageWriteException(
+                throw new ImagingException(
                         "T.6 compression with the uncompressed mode extension is not yet supported");
             }
             for (int i = 0; i < strips.length; i++) {
                 strips[i] = T4AndT6Compression.compressT6(strips[i], width, strips[i].length / ((width + 7) / 8));
             }
-        } else if (compression == TIFF_COMPRESSION_PACKBITS) {
+            break;
+        }
+        case TIFF_COMPRESSION_PACKBITS:
             for (int i = 0; i < strips.length; i++) {
                 strips[i] = new PackBits().compress(strips[i]);
             }
-        } else if (compression == TIFF_COMPRESSION_LZW) {
+            break;
+        case TIFF_COMPRESSION_LZW:
             predictor =  TiffTagConstants.PREDICTOR_VALUE_HORIZONTAL_DIFFERENCING;
             for (int i = 0; i < strips.length; i++) {
                 final byte[] uncompressed = strips[i];
@@ -440,16 +542,18 @@ public abstract class TiffImageWriterBase {
                 final byte[] compressed = compressor.compress(uncompressed);
                 strips[i] = compressed;
             }
-        } else if (compression == TIFF_COMPRESSION_DEFLATE_ADOBE) {
+            break;
+        case TIFF_COMPRESSION_DEFLATE_ADOBE:
             predictor = TiffTagConstants.PREDICTOR_VALUE_HORIZONTAL_DIFFERENCING;
             for (int i = 0; i < strips.length; i++) {
                 this.applyPredictor(width, samplesPerPixel, strips[i]);
                 strips[i] = ZlibDeflate.compress(strips[i]);
             }
-        } else if (compression == TIFF_COMPRESSION_UNCOMPRESSED) {
-            // do nothing.
-        } else {
-            throw new ImageWriteException(
+            break;
+        case TIFF_COMPRESSION_UNCOMPRESSED:
+            break;
+        default:
+            throw new ImagingException(
                     "Invalid compression parameter (Only CCITT 1D/Group 3/Group 4, LZW, Packbits, Zlib Deflate and uncompressed supported).");
         }
 
@@ -556,103 +660,6 @@ public abstract class TiffImageWriterBase {
         }
 
         write(os, outputSet);
-    }
-
-    private void combineUserExifIntoFinalExif(final TiffOutputSet userExif,
-            final TiffOutputSet outputSet) throws ImageWriteException {
-        final List<TiffOutputDirectory> outputDirectories = outputSet.getDirectories();
-        outputDirectories.sort(TiffOutputDirectory.COMPARATOR);
-        for (final TiffOutputDirectory userDirectory : userExif.getDirectories()) {
-            final int location = Collections.binarySearch(outputDirectories,
-                    userDirectory, TiffOutputDirectory.COMPARATOR);
-            if (location < 0) {
-                outputSet.addDirectory(userDirectory);
-            } else {
-                final TiffOutputDirectory outputDirectory = outputDirectories.get(location);
-                for (final TiffOutputField userField : userDirectory.getFields()) {
-                    if (outputDirectory.findField(userField.tagInfo) == null) {
-                        outputDirectory.add(userField);
-                    }
-                }
-            }
-        }
-    }
-
-    private byte[][] getStrips(final BufferedImage src, final int samplesPerPixel,
-            final int bitsPerSample, final int rowsPerStrip) {
-        final int width = src.getWidth();
-        final int height = src.getHeight();
-
-        final int stripCount = (height + rowsPerStrip - 1) / rowsPerStrip;
-
-        byte[][] result;
-        { // Write Strips
-            result = new byte[stripCount][];
-
-            int remainingRows = height;
-
-            for (int i = 0; i < stripCount; i++) {
-                final int rowsInStrip = Math.min(rowsPerStrip, remainingRows);
-                remainingRows -= rowsInStrip;
-
-                final int bitsInRow = bitsPerSample * samplesPerPixel * width;
-                final int bytesPerRow = (bitsInRow + 7) / 8;
-                final int bytesInStrip = rowsInStrip * bytesPerRow;
-
-                final byte[] uncompressed = new byte[bytesInStrip];
-
-                int counter = 0;
-                int y = i * rowsPerStrip;
-                final int stop = i * rowsPerStrip + rowsPerStrip;
-
-                for (; (y < height) && (y < stop); y++) {
-                    int bitCache = 0;
-                    int bitsInCache = 0;
-                    for (int x = 0; x < width; x++) {
-                        final int rgb = src.getRGB(x, y);
-                        final int red = 0xff & (rgb >> 16);
-                        final int green = 0xff & (rgb >> 8);
-                        final int blue = 0xff & (rgb >> 0);
-
-                        if (bitsPerSample == 1) {
-                            int sample = (red + green + blue) / 3;
-                            if (sample > 127) {
-                                sample = 0;
-                            } else {
-                                sample = 1;
-                            }
-                            bitCache <<= 1;
-                            bitCache |= sample;
-                            bitsInCache++;
-                            if (bitsInCache == 8) {
-                                uncompressed[counter++] = (byte) bitCache;
-                                bitCache = 0;
-                                bitsInCache = 0;
-                            }
-                        } else if(samplesPerPixel==4){
-                            uncompressed[counter++] = (byte) red;
-                            uncompressed[counter++] = (byte) green;
-                            uncompressed[counter++] = (byte) blue;
-                            uncompressed[counter++] = (byte) (rgb>>24);
-                        }else {
-                            // samples per pixel is 3
-                            uncompressed[counter++] = (byte) red;
-                            uncompressed[counter++] = (byte) green;
-                            uncompressed[counter++] = (byte) blue;
-                        }
-                    }
-                    if (bitsInCache > 0) {
-                        bitCache <<= (8 - bitsInCache);
-                        uncompressed[counter++] = (byte) bitCache;
-                    }
-                }
-
-                result[i] = uncompressed;
-            }
-
-        }
-
-        return result;
     }
 
     protected void writeImageFileHeader(final BinaryOutputStream bos)

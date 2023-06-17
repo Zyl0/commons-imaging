@@ -23,7 +23,7 @@ import java.io.OutputStream;
 import java.nio.ByteOrder;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.BinaryOutputStream;
 
 public class TiffImageWriterLossy extends TiffImageWriterBase {
@@ -34,23 +34,6 @@ public class TiffImageWriterLossy extends TiffImageWriterBase {
 
     public TiffImageWriterLossy(final ByteOrder byteOrder) {
         super(byteOrder);
-    }
-
-    @Override
-    public void write(final OutputStream os, final TiffOutputSet outputSet)
-            throws IOException, ImageWriteException {
-        final TiffOutputSummary outputSummary = validateDirectories(outputSet);
-
-        final List<TiffOutputItem> outputItems = outputSet.getOutputItems(outputSummary);
-
-        updateOffsetsStep(outputItems);
-
-        outputSummary.updateOffsets(byteOrder);
-
-        final BinaryOutputStream bos = BinaryOutputStream.create(os, byteOrder);
-
-        // NB: resource is intentionally left open
-        writeStep(bos, outputItems);
     }
 
     private void updateOffsetsStep(final List<TiffOutputItem> outputItems) {
@@ -66,9 +49,26 @@ public class TiffImageWriterLossy extends TiffImageWriterBase {
         }
     }
 
+    @Override
+    public void write(final OutputStream os, final TiffOutputSet outputSet)
+            throws IOException, ImagingException {
+        final TiffOutputSummary outputSummary = validateDirectories(outputSet);
+
+        final List<TiffOutputItem> outputItems = outputSet.getOutputItems(outputSummary);
+
+        updateOffsetsStep(outputItems);
+
+        outputSummary.updateOffsets(byteOrder);
+
+        final BinaryOutputStream bos = BinaryOutputStream.create(os, byteOrder);
+
+        // NB: resource is intentionally left open
+        writeStep(bos, outputItems);
+    }
+
     private void writeStep(final BinaryOutputStream bos,
             final List<TiffOutputItem> outputItems) throws IOException,
-            ImageWriteException {
+            ImagingException {
         writeImageFileHeader(bos);
 
         for (final TiffOutputItem outputItem : outputItems) {

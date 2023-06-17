@@ -19,7 +19,8 @@ package org.apache.commons.imaging.formats.tiff.taginfos;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.formats.tiff.constants.TiffDirectoryType;
 import org.apache.commons.imaging.formats.tiff.fieldtypes.FieldType;
 
@@ -29,6 +30,11 @@ public class TagInfoAscii extends TagInfo {
         super(name, tag, FieldType.ASCII, length, directoryType);
     }
 
+    public byte[] encodeValue(final ByteOrder byteOrder, final String... values)
+            throws ImagingException {
+        return FieldType.ASCII.writeData(values, byteOrder);
+    }
+
     public String[] getValue(final ByteOrder byteOrder, final byte[] bytes) {
         int nullCount = 0;
         for (int i = 0; i < bytes.length - 1; i++) {
@@ -36,7 +42,7 @@ public class TagInfoAscii extends TagInfo {
                 nullCount++;
             }
         }
-        final String[] strings = new String[nullCount + 1];
+        final String[] strings = Allocator.array(nullCount + 1, String[]::new, 24);
         int stringsAdded = 0;
         strings[0] = ""; // if we have a 0 length string
         int nextStringPos = 0;
@@ -58,10 +64,5 @@ public class TagInfoAscii extends TagInfo {
             strings[stringsAdded++] = string;
         }
         return strings;
-    }
-
-    public byte[] encodeValue(final ByteOrder byteOrder, final String... values)
-            throws ImageWriteException {
-        return FieldType.ASCII.writeData(values, byteOrder);
     }
 }

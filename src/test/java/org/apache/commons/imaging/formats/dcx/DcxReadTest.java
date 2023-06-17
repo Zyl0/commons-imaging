@@ -17,17 +17,17 @@
 
 package org.apache.commons.imaging.formats.dcx;
 
-import org.apache.commons.imaging.Imaging;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import org.apache.commons.imaging.Imaging;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 public class DcxReadTest extends DcxBaseTest {
 
@@ -35,11 +35,12 @@ public class DcxReadTest extends DcxBaseTest {
         return getDcxImages().stream();
     }
 
-    @Disabled(value = "RoundtripTest has to be fixed before implementation can throw UnsupportedOperationException")
     @ParameterizedTest
     @MethodSource("data")
-    public void testImageMetadata(final File imageFile) {
-        Assertions.assertThrows(UnsupportedOperationException.class, () -> Imaging.getMetadata(imageFile));
+    public void testBufferedImage(final File imageFile) throws Exception {
+        final BufferedImage image = Imaging.getBufferedImage(imageFile);
+        assertNotNull(image);
+        // TODO assert more
     }
 
     @Disabled(value = "RoundtripTest has to be fixed before implementation can throw UnsupportedOperationException")
@@ -49,12 +50,11 @@ public class DcxReadTest extends DcxBaseTest {
         Imaging.getImageInfo(imageFile);
     }
 
+    @Disabled(value = "RoundtripTest has to be fixed before implementation can throw UnsupportedOperationException")
     @ParameterizedTest
     @MethodSource("data")
-    public void testBufferedImage(final File imageFile) throws Exception {
-        final BufferedImage image = Imaging.getBufferedImage(imageFile);
-        assertNotNull(image);
-        // TODO assert more
+    public void testImageMetadata(final File imageFile) {
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> Imaging.getMetadata(imageFile));
     }
 
 }

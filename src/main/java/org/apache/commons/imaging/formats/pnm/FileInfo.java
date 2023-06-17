@@ -21,11 +21,40 @@ import java.io.InputStream;
 
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageInfo;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageBuilder;
 
 abstract class FileInfo {
+
+    static int readSample(final InputStream is, final int bytesPerSample) throws IOException {
+        int sample = 0;
+        for (int i = 0; i < bytesPerSample; i++) {
+            final int nextByte = is.read();
+            if (nextByte < 0) {
+                throw new ImagingException("PNM: Unexpected EOF");
+            }
+            sample <<= 8;
+            sample |= nextByte;
+        }
+        return sample;
+    }
+
+    static int scaleSample(int sample, final float scale, final int max) throws ImagingException {
+        if (sample < 0) {
+            // Even netpbm tools break for files like this
+            throw new ImagingException("Negative pixel values are invalid in PNM files");
+        }
+        if (sample > max) {
+            // invalid values -> black
+            sample = 0;
+        }
+        return (int) ((sample * scale / max) + 0.5f);
+    }
+
     final int width;
+
     final int height;
+
     final boolean rawBits;
 
     FileInfo(final int width, final int height, final boolean rawBits) {
@@ -34,11 +63,9 @@ abstract class FileInfo {
         this.rawBits = rawBits;
     }
 
-    abstract boolean hasAlpha();
-
-    abstract int getNumComponents();
-
     abstract int getBitDepth();
+
+    abstract ImageInfo.ColorType getColorType();
 
     abstract ImageFormat getImageType();
 
@@ -46,39 +73,16 @@ abstract class FileInfo {
 
     abstract String getMIMEType();
 
-    abstract ImageInfo.ColorType getColorType();
-
-    abstract int getRGB(WhiteSpaceReader wsr) throws IOException;
+    abstract int getNumComponents();
 
     abstract int getRGB(InputStream is) throws IOException;
 
+    abstract int getRGB(WhiteSpaceReader wsr) throws IOException;
+
+    abstract boolean hasAlpha();
+
     void newline() {
         // do nothing by default.
-    }
-
-    static int readSample(final InputStream is, final int bytesPerSample) throws IOException {
-        int sample = 0;
-        for (int i = 0; i < bytesPerSample; i++) {
-            final int nextByte = is.read();
-            if (nextByte < 0) {
-                throw new IOException("PNM: Unexpected EOF");
-            }
-            sample <<= 8;
-            sample |= nextByte;
-        }
-        return sample;
-    }
-
-    static int scaleSample(int sample, final float scale, final int max) throws IOException {
-        if (sample < 0) {
-            // Even netpbm tools break for files like this
-            throw new IOException("Negative pixel values are invalid in PNM files");
-        }
-        if (sample > max) {
-            // invalid values -> black
-            sample = 0;
-        }
-        return (int) ((sample * scale / max) + 0.5f);
     }
 
     void readImage(final ImageBuilder imageBuilder, final InputStream is)

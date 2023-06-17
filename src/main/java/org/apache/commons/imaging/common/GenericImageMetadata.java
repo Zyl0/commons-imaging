@@ -20,15 +20,50 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class GenericImageMetadata implements ImageMetadata {
-    private static final String NEWLINE = System.getProperty("line.separator");
-    private final List<ImageMetadataItem> items = new ArrayList<>();
 
-    public void add(final String keyword, final String text) {
-        add(new GenericImageMetadataItem(keyword, text));
+    public static class GenericImageMetadataItem implements ImageMetadataItem {
+
+        private final String keyword;
+        private final String text;
+
+        public GenericImageMetadataItem(final String keyword, final String text) {
+            this.keyword = keyword;
+            this.text = text;
+        }
+
+        public String getKeyword() {
+            return keyword;
+        }
+
+        public String getText() {
+            return text;
+        }
+
+        @Override
+        public String toString() {
+            return toString(null);
+        }
+
+        @Override
+        public String toString(final String prefix) {
+            final String result = keyword + ": " + text;
+            if (null != prefix) {
+                return prefix + result;
+            }
+            return result;
+        }
     }
+
+    private static final String NEWLINE = System.lineSeparator();
+
+    private final List<ImageMetadataItem> items = new ArrayList<>();
 
     public void add(final ImageMetadataItem item) {
         items.add(item);
+    }
+
+    public void add(final String keyword, final String text) {
+        add(new GenericImageMetadataItem(keyword, text));
     }
 
     @Override
@@ -63,38 +98,6 @@ public class GenericImageMetadata implements ImageMetadata {
             // Debug.debug();
         }
         return result.toString();
-    }
-
-    public static class GenericImageMetadataItem implements ImageMetadataItem {
-        private final String keyword;
-        private final String text;
-
-        public GenericImageMetadataItem(final String keyword, final String text) {
-            this.keyword = keyword;
-            this.text = text;
-        }
-
-        public String getKeyword() {
-            return keyword;
-        }
-
-        public String getText() {
-            return text;
-        }
-
-        @Override
-        public String toString() {
-            return toString(null);
-        }
-
-        @Override
-        public String toString(final String prefix) {
-            final String result = keyword + ": " + text;
-            if (null != prefix) {
-                return prefix + result;
-            }
-            return result;
-        }
     }
 
 }

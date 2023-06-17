@@ -16,13 +16,8 @@
  */
 package org.apache.commons.imaging.formats.pnm;
 
-import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.ImageInfo;
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
-import org.apache.commons.imaging.Imaging;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
@@ -30,15 +25,19 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.apache.commons.imaging.ImageFormats;
+import org.apache.commons.imaging.ImageInfo;
+import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 public class PnmImageParserTest {
 
     private static final Charset US_ASCII = StandardCharsets.US_ASCII;
 
     @Test
-    public void testGetImageInfo_happyCase() throws ImageReadException, IOException {
+    public void testGetImageInfo_happyCase() throws ImagingException, IOException {
         final byte[] bytes = "P1\n3 2\n0 1 0\n1 0 1\n".getBytes(US_ASCII);
         final PnmImagingParameters params = new PnmImagingParameters();
         final PnmImageParser underTest = new PnmImageParser();
@@ -50,8 +49,36 @@ public class PnmImageParserTest {
     }
 
     @Test
-    public void testWriteImageRaw_happyCase() throws ImageWriteException,
-                                                     ImageReadException, IOException {
+    public void testGetImageInfo_invalidHeight() {
+        final byte[] bytes = "P1\n2 a\n0 0\n0 0\n0 0\n0 0\n0 0\n0 1\n1 1\n1 1\n1 1\n1 1\n1 1\n".getBytes(US_ASCII);
+        final PnmImagingParameters params = new PnmImagingParameters();
+        final PnmImageParser underTest = new PnmImageParser();
+        Assertions.assertThrows(ImagingException.class, () -> underTest.getImageInfo(bytes, params));
+    }
+
+    /**
+     * If an invalid width is specified, should throw {@link ImagingException} rather than
+     * {@link NumberFormatException}.
+     */
+    @Test
+    public void testGetImageInfo_invalidWidth() {
+        final byte[] bytes = "P1\na 2\n0 0 0 0 0 0 0 0 0 0 0\n1 1 1 1 1 1 1 1 1 1 1\n".getBytes(US_ASCII);
+        final PnmImagingParameters params = new PnmImagingParameters();
+        final PnmImageParser underTest = new PnmImageParser();
+        Assertions.assertThrows(ImagingException.class, () -> underTest.getImageInfo(bytes, params));
+    }
+
+    @Test
+    public void testGetImageInfo_missingWidthValue() {
+        final byte[] bytes = "P7\nWIDTH \n".getBytes(US_ASCII);
+        final PnmImagingParameters params = new PnmImagingParameters();
+        final PnmImageParser underTest = new PnmImageParser();
+        Assertions.assertThrows(ImagingException.class, () -> underTest.getImageInfo(bytes, params));
+    }
+
+    @Test
+    public void testWriteImageRaw_happyCase() throws ImagingException,
+                                                     ImagingException, IOException {
         final BufferedImage srcImage = new BufferedImage(10, 10, BufferedImage.TYPE_INT_ARGB);
 
         final byte[] dstBytes = Imaging.writeImageToBytes(srcImage, ImageFormats.PNM);
@@ -69,33 +96,5 @@ public class PnmImageParserTest {
 
             assertArrayEquals(actual, expected);
         }
-    }
-
-    /**
-     * If an invalid width is specified, should throw {@link ImageReadException} rather than
-     * {@link NumberFormatException}.
-     */
-    @Test
-    public void testGetImageInfo_invalidWidth() {
-        final byte[] bytes = "P1\na 2\n0 0 0 0 0 0 0 0 0 0 0\n1 1 1 1 1 1 1 1 1 1 1\n".getBytes(US_ASCII);
-        final PnmImagingParameters params = new PnmImagingParameters();
-        final PnmImageParser underTest = new PnmImageParser();
-        Assertions.assertThrows(ImageReadException.class, () -> underTest.getImageInfo(bytes, params));
-    }
-
-    @Test
-    public void testGetImageInfo_invalidHeight() {
-        final byte[] bytes = "P1\n2 a\n0 0\n0 0\n0 0\n0 0\n0 0\n0 1\n1 1\n1 1\n1 1\n1 1\n1 1\n".getBytes(US_ASCII);
-        final PnmImagingParameters params = new PnmImagingParameters();
-        final PnmImageParser underTest = new PnmImageParser();
-        Assertions.assertThrows(ImageReadException.class, () -> underTest.getImageInfo(bytes, params));
-    }
-
-    @Test
-    public void testGetImageInfo_missingWidthValue() {
-        final byte[] bytes = "P7\nWIDTH \n".getBytes(US_ASCII);
-        final PnmImagingParameters params = new PnmImagingParameters();
-        final PnmImageParser underTest = new PnmImageParser();
-        Assertions.assertThrows(ImageReadException.class, () -> underTest.getImageInfo(bytes, params));
     }
 }

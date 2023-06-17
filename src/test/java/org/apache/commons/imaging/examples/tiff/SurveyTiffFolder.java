@@ -27,8 +27,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
-
 /**
  * Recursively search the specified path and list TIFF files and metadata.
  * <p>
@@ -42,6 +40,90 @@ import org.apache.commons.imaging.ImageReadException;
  * for inspection in Excel.
  */
 public class SurveyTiffFolder {
+
+    private static class PathComparator implements Comparator<String[]> {
+
+        @Override
+        public int compare(final String[] a, final String[] b) {
+            for (int i = 0; i < a.length && i < b.length; i++) {
+                int test;
+                if (isNumeric(a[i]) && isNumeric(b[i])) {
+                    final int iA = Integer.parseInt(a[i]);
+                    final int iB = Integer.parseInt(b[i]);
+                    test = iA - iB;
+                } else {
+                    test = a[i].compareTo(b[i]);
+                }
+                if (test != 0) {
+                    return test;
+                }
+            }
+            // in practice, the program should never reach this position.
+            // at this point, all entries in both arrays are equal,
+            // so order the entries so that the shortest array goes first
+            if (a.length < b.length) {
+                return -1;
+            }
+            return 1;
+        }
+
+        private boolean isNumeric(final String a) {
+            for (int i = 0; i < a.length(); i++) {
+                if (!Character.isDigit(a.charAt(i))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+    }
+
+    private static int collectPaths(
+        final File parent,
+        final List<String[]> pathList,
+        final String[] scratch,
+        final int depth) {
+        if (depth == scratch.length) {
+            // directory hierarchy is too deep
+            return 0;
+        }
+
+        final File[] files = parent.listFiles();
+        for (final File f : files) {
+            if (!f.isHidden()) {
+                final String name = f.getName();
+                scratch[depth] = name;
+                if (f.isDirectory()) {
+                    collectPaths(f, pathList, scratch, depth + 1);
+                } else {
+                    final int i = name.lastIndexOf('.');
+                    if (i > 0) {
+                        final String ext = name.substring(i).toLowerCase();
+                        if (".tif".equals(ext) || ".tiff".equals(ext)) {
+                            final String[] temp = Arrays.copyOf(scratch, depth + 1);
+                            pathList.add(temp);
+                        }
+                    }
+                }
+            }
+        }
+        return depth;
+    }
+
+    private static int[] findMaxLengths(final List<String[]> pathList) {
+        int[] m = new int[1];
+        for (final String[] s : pathList) {
+            if (s.length > m.length) {
+                m = Arrays.copyOf(m, s.length);
+            }
+            for (int i = 0; i < s.length; i++) {
+                if (s[i].length() > m[i]) {
+                    m[i] = s[i].length();
+                }
+            }
+        }
+        return m;
+    }
 
     /**
      * @param args the command line arguments
@@ -93,90 +175,6 @@ public class SurveyTiffFolder {
         }
     }
 
-    private static int collectPaths(
-        final File parent,
-        final List<String[]> pathList,
-        final String[] scratch,
-        final int depth) {
-        if (depth == scratch.length) {
-            // directory hierarchy is too deep
-            return 0;
-        }
-
-        final File[] files = parent.listFiles();
-        for (final File f : files) {
-            if (!f.isHidden()) {
-                final String name = f.getName();
-                scratch[depth] = name;
-                if (f.isDirectory()) {
-                    collectPaths(f, pathList, scratch, depth + 1);
-                } else {
-                    final int i = name.lastIndexOf('.');
-                    if (i > 0) {
-                        final String ext = name.substring(i).toLowerCase();
-                        if (".tif".equals(ext) || ".tiff".equals(ext)) {
-                            final String[] temp = Arrays.copyOf(scratch, depth + 1);
-                            pathList.add(temp);
-                        }
-                    }
-                }
-            }
-        }
-        return depth;
-    }
-
-    private static class PathComparator implements Comparator<String[]> {
-
-        @Override
-        public int compare(final String[] a, final String[] b) {
-            for (int i = 0; i < a.length && i < b.length; i++) {
-                int test;
-                if (isNumeric(a[i]) && isNumeric(b[i])) {
-                    final int iA = Integer.parseInt(a[i]);
-                    final int iB = Integer.parseInt(b[i]);
-                    test = iA - iB;
-                } else {
-                    test = a[i].compareTo(b[i]);
-                }
-                if (test != 0) {
-                    return test;
-                }
-            }
-            // in practice, the program should never reach this position.
-            // at this point, all entries in both arrays are equal,
-            // so order the entries so that the shortest array goes first
-            if (a.length < b.length) {
-                return -1;
-            }
-            return 1;
-        }
-
-        private boolean isNumeric(final String a) {
-            for (int i = 0; i < a.length(); i++) {
-                if (!Character.isDigit(a.charAt(i))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-    }
-
-    private static int[] findMaxLengths(final List<String[]> pathList) {
-        int[] m = new int[1];
-        for (final String[] s : pathList) {
-            if (s.length > m.length) {
-                m = Arrays.copyOf(m, s.length);
-            }
-            for (int i = 0; i < s.length; i++) {
-                if (s[i].length() > m[i]) {
-                    m[i] = s[i].length();
-                }
-            }
-        }
-        return m;
-    }
-
     private static void surveyFiles(final File topDir, final List<String[]> pathList, final int[] maxLen, final boolean csv, final PrintStream ps) {
         final SurveyTiffFile surveyor = new SurveyTiffFile();
         int n = maxLen.length - 1;
@@ -212,7 +210,7 @@ public class SurveyTiffFolder {
             String result;
             try {
                 result = surveyor.surveyFile(file, csv);
-            } catch (IOException | ImageReadException ex) {
+            } catch (IOException ex) {
                 sBuilder.append(ex.getMessage());
                 badFiles.add(sBuilder.toString());
                 continue; // result = ex.getMessage();

@@ -23,12 +23,13 @@ import java.nio.ByteOrder;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.BinaryFunctions;
 import org.apache.commons.imaging.common.ByteConversions;
 import org.apache.commons.imaging.common.GenericImageMetadata;
 import org.apache.commons.imaging.common.ImageMetadata;
-import org.apache.commons.imaging.common.bytesource.ByteSource;
 
 class RgbeInfo implements Closeable {
     // #?RADIANCE
@@ -37,38 +38,40 @@ class RgbeInfo implements Closeable {
     };
     private static final Pattern RESOLUTION_STRING = Pattern.compile("-Y (\\d+) \\+X (\\d+)");
 
+    private static final byte[] TWO_TWO = { 0x2, 0x2 };
+    private static void decompress(final InputStream in, final byte[] out)
+            throws IOException,ImagingException {
+        int position = 0;
+        final int total = out.length;
+
+        while (position < total) {
+            final int n = in.read();
+
+            if (n < 0) {
+                throw new ImagingException("Error decompressing RGBE file");
+            }
+
+            if (n > 128) {
+                final int value = in.read();
+
+                for (int i = 0; i < (n & 0x7f); i++) {
+                    out[position++] = (byte) value;
+                }
+            } else {
+                for (int i = 0; i < n; i++) {
+                    out[position++] = (byte) in.read();
+                }
+            }
+        }
+    }
     private final InputStream in;
     private GenericImageMetadata metadata;
     private int width = -1;
+
     private int height = -1;
-    private static final byte[] TWO_TWO = { 0x2, 0x2 };
 
     RgbeInfo(final ByteSource byteSource) throws IOException {
         this.in = byteSource.getInputStream();
-    }
-
-    ImageMetadata getMetadata() throws IOException, ImageReadException {
-        if (null == metadata) {
-            readMetadata();
-        }
-
-        return metadata;
-    }
-
-    int getWidth() throws IOException, ImageReadException {
-        if (-1 == width) {
-            readDimensions();
-        }
-
-        return width;
-    }
-
-    int getHeight() throws IOException, ImageReadException {
-        if (-1 == height) {
-            readDimensions();
-        }
-
-        return height;
     }
 
     @Override
@@ -76,70 +79,36 @@ class RgbeInfo implements Closeable {
         in.close();
     }
 
-    private void readDimensions() throws IOException, ImageReadException {
-        getMetadata(); // Ensure we've read past this
-
-        final InfoHeaderReader reader = new InfoHeaderReader(in);
-        final String resolution = reader.readNextLine();
-        final Matcher matcher = RESOLUTION_STRING.matcher(resolution);
-
-        if (!matcher.matches()) {
-            throw new ImageReadException(
-                    "Invalid HDR resolution string. Only \"-Y N +X M\" is supported. Found \""
-                            + resolution + "\"");
+    int getHeight() throws IOException, ImagingException {
+        if (-1 == height) {
+            readDimensions();
         }
 
-        height = Integer.parseInt(matcher.group(1));
-        width = Integer.parseInt(matcher.group(2));
+        return height;
     }
 
-    private void readMetadata() throws IOException, ImageReadException {
-        BinaryFunctions.readAndVerifyBytes(in, HEADER, "Not a valid HDR: Incorrect Header");
-
-        final InfoHeaderReader reader = new InfoHeaderReader(in);
-
-        if (!reader.readNextLine().isEmpty()) {
-            throw new ImageReadException("Not a valid HDR: Incorrect Header");
+    ImageMetadata getMetadata() throws IOException, ImagingException {
+        if (null == metadata) {
+            readMetadata();
         }
 
-        metadata = new GenericImageMetadata();
-
-        String info = reader.readNextLine();
-
-        while (!info.isEmpty()) {
-            final int equals = info.indexOf('=');
-
-            if (equals > 0) {
-                final String variable = info.substring(0, equals);
-                final String value = info.substring(equals + 1);
-
-                if ("FORMAT".equals(value) && !"32-bit_rle_rgbe".equals(value)) {
-                    throw new ImageReadException("Only 32-bit_rle_rgbe images are supported, trying to read " + value);
-                }
-
-                metadata.add(variable, value);
-            } else {
-                metadata.add("<command>", info);
-            }
-
-            info = reader.readNextLine();
-        }
+        return metadata;
     }
 
-    public float[][] getPixelData() throws IOException, ImageReadException {
+    public float[][] getPixelData() throws IOException, ImagingException {
         // Read into local variables to ensure that we have seeked into the file
         // far enough
         final int ht = getHeight();
         final int wd = getWidth();
 
         if (wd >= 32768) {
-            throw new ImageReadException("Scan lines must be less than 32768 bytes long");
+            throw new ImagingException("Scan lines must be less than 32768 bytes long");
         }
 
         final byte[] scanLineBytes = ByteConversions.toBytes((short) wd,
                 ByteOrder.BIG_ENDIAN);
-        final byte[] rgbe = new byte[wd * 4];
-        final float[][] out = new float[3][wd * ht];
+        final byte[] rgbe = Allocator.byteArray(wd * 4);
+        final float[][] out = new float[3][Allocator.check(wd * ht)];
 
         for (int i = 0; i < ht; i++) {
             BinaryFunctions.readAndVerifyBytes(in, TWO_TWO, "Scan line " + i + " expected to start with 0x2 0x2");
@@ -168,29 +137,61 @@ class RgbeInfo implements Closeable {
         return out;
     }
 
-    private static void decompress(final InputStream in, final byte[] out)
-            throws IOException,ImageReadException {
-        int position = 0;
-        final int total = out.length;
+    int getWidth() throws IOException, ImagingException {
+        if (-1 == width) {
+            readDimensions();
+        }
 
-        while (position < total) {
-            final int n = in.read();
+        return width;
+    }
 
-            if (n < 0) {
-                throw new ImageReadException("Error decompressing RGBE file");
-            }
+    private void readDimensions() throws IOException, ImagingException {
+        getMetadata(); // Ensure we've read past this
 
-            if (n > 128) {
-                final int value = in.read();
+        final InfoHeaderReader reader = new InfoHeaderReader(in);
+        final String resolution = reader.readNextLine();
+        final Matcher matcher = RESOLUTION_STRING.matcher(resolution);
 
-                for (int i = 0; i < (n & 0x7f); i++) {
-                    out[position++] = (byte) value;
+        if (!matcher.matches()) {
+            throw new ImagingException(
+                    "Invalid HDR resolution string. Only \"-Y N +X M\" is supported. Found \""
+                            + resolution + "\"");
+        }
+
+        height = Integer.parseInt(matcher.group(1));
+        width = Integer.parseInt(matcher.group(2));
+    }
+
+    private void readMetadata() throws IOException, ImagingException {
+        BinaryFunctions.readAndVerifyBytes(in, HEADER, "Not a valid HDR: Incorrect Header");
+
+        final InfoHeaderReader reader = new InfoHeaderReader(in);
+
+        if (!reader.readNextLine().isEmpty()) {
+            throw new ImagingException("Not a valid HDR: Incorrect Header");
+        }
+
+        metadata = new GenericImageMetadata();
+
+        String info = reader.readNextLine();
+
+        while (!info.isEmpty()) {
+            final int equals = info.indexOf('=');
+
+            if (equals > 0) {
+                final String variable = info.substring(0, equals);
+                final String value = info.substring(equals + 1);
+
+                if ("FORMAT".equals(value) && !"32-bit_rle_rgbe".equals(value)) {
+                    throw new ImagingException("Only 32-bit_rle_rgbe images are supported, trying to read " + value);
                 }
+
+                metadata.add(variable, value);
             } else {
-                for (int i = 0; i < n; i++) {
-                    out[position++] = (byte) in.read();
-                }
+                metadata.add("<command>", info);
             }
+
+            info = reader.readNextLine();
         }
     }
 }

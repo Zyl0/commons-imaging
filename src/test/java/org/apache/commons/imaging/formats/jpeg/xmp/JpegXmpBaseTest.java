@@ -21,13 +21,27 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
-import org.apache.commons.imaging.common.bytesource.ByteSource;
-import org.apache.commons.imaging.common.bytesource.ByteSourceFile;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.formats.jpeg.JpegImageParser;
 
 public abstract class JpegXmpBaseTest extends ImagingTest {
+
+    private static final ImageFilter HAS_JPEG_XMP_IMAGE_FILTER = JpegXmpBaseTest::hasJpegXmpData;
+
+    protected static List<File> getImagesWithXmpData() throws IOException,
+            ImagingException {
+        return getTestImages(HAS_JPEG_XMP_IMAGE_FILTER);
+    }
+
+    // private static final ImageFilter JPEG_IMAGE_FILTER = new ImageFilter()
+    // {
+    // public boolean accept(File file) throws IOException, ImageReadException
+    // {
+    // return file.getName().toLowerCase().endsWith(".jpg");
+    // }
+    // };
 
     protected static boolean hasJpegXmpData(final File file) {
         if (!file.getName().toLowerCase().endsWith(".jpg"))
@@ -41,7 +55,7 @@ public abstract class JpegXmpBaseTest extends ImagingTest {
         // Debug.debug("possible file", file);
 
         try {
-            final ByteSource byteSource = new ByteSourceFile(file);
+            final ByteSource byteSource = ByteSource.file(file);
             return new JpegImageParser().hasXmpSegment(byteSource);
         } catch (final Exception e) {
             // Debug.debug("Error file", file.getAbsoluteFile());
@@ -50,28 +64,13 @@ public abstract class JpegXmpBaseTest extends ImagingTest {
         }
     }
 
-    private static final ImageFilter HAS_JPEG_XMP_IMAGE_FILTER = JpegXmpBaseTest::hasJpegXmpData;
-
-    // private static final ImageFilter JPEG_IMAGE_FILTER = new ImageFilter()
-    // {
-    // public boolean accept(File file) throws IOException, ImageReadException
-    // {
-    // return file.getName().toLowerCase().endsWith(".jpg");
-    // }
-    // };
-
-    protected File getImageWithXmpData() throws IOException, ImageReadException {
-        return getTestImage(HAS_JPEG_XMP_IMAGE_FILTER);
-    }
-
-    protected static List<File> getImagesWithXmpData() throws IOException,
-            ImageReadException {
-        return getTestImages(HAS_JPEG_XMP_IMAGE_FILTER);
-    }
-
     protected List<File> getImagesWithXmpData(final int max) throws IOException,
-            ImageReadException {
+            ImagingException {
         return getTestImages(HAS_JPEG_XMP_IMAGE_FILTER, max);
+    }
+
+    protected File getImageWithXmpData() throws IOException, ImagingException {
+        return getTestImage(HAS_JPEG_XMP_IMAGE_FILTER);
     }
 
     // protected File getJpegImage() throws IOException, ImageReadException

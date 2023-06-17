@@ -16,27 +16,30 @@
  */
 package org.apache.commons.imaging.roundtrip;
 
-import org.apache.commons.imaging.ImageParser;
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
-import org.apache.commons.imaging.ImagingParameters;
-import org.apache.commons.imaging.common.RgbBufferedImageFactory;
-import org.apache.commons.imaging.internal.ImageParserFactory;
-import org.junit.jupiter.params.provider.Arguments;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import org.apache.commons.imaging.ImageParser;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.ImagingParameters;
+import org.apache.commons.imaging.common.RgbBufferedImageFactory;
+import org.apache.commons.imaging.internal.ImageParserFactory;
+import org.junit.jupiter.params.provider.Arguments;
 
 public class RoundtripBase {
 
+    public static Stream<Arguments> createRoundtripArguments(final BufferedImage[] images) {
+        return Stream.of(images).flatMap(i -> Stream.of(FormatInfo.READ_WRITE_FORMATS).map(f -> Arguments.of(i, f)));
+    }
+
     protected void roundtrip(final FormatInfo formatInfo, final BufferedImage testImage,
                              final String tempPrefix, final boolean imageExact) throws IOException,
-            ImageReadException, ImageWriteException {
+            ImagingException, ImagingException {
 
         final ImageParser imageParser = ImageParserFactory.getImageParser(formatInfo.format);
 
@@ -67,9 +70,5 @@ public class RoundtripBase {
 
             assertArrayEquals(temp1, temp2);
         }
-    }
-
-    public static Stream<Arguments> createRoundtripArguments(final BufferedImage[] images) {
-        return Stream.of(images).flatMap(i -> Stream.of(FormatInfo.READ_WRITE_FORMATS).map(f -> Arguments.of(i, f)));
     }
 }

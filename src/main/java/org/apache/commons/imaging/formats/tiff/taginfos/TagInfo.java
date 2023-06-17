@@ -23,8 +23,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.formats.tiff.TiffField;
 import org.apache.commons.imaging.formats.tiff.constants.TiffDirectoryType;
 import org.apache.commons.imaging.formats.tiff.fieldtypes.FieldType;
@@ -38,6 +37,16 @@ public class TagInfo {
     public final TiffDirectoryType directoryType;
     private final boolean isOffset;
 
+    public TagInfo(final String name, final int tag, final FieldType dataType) {
+        this(name, tag, dataType, LENGTH_UNKNOWN,
+                TiffDirectoryType.EXIF_DIRECTORY_UNKNOWN);
+    }
+
+    public TagInfo(final String name, final int tag, final FieldType dataType, final int length) {
+        this(name, tag, Arrays.asList(dataType), length,
+                TiffDirectoryType.EXIF_DIRECTORY_UNKNOWN);
+    }
+
     public TagInfo(final String name, final int tag, final FieldType dataType, final int length,
             final TiffDirectoryType exifDirectory) {
         this(name, tag, Arrays.asList(dataType), length, exifDirectory);
@@ -47,16 +56,6 @@ public class TagInfo {
             final TiffDirectoryType exifDirectory, final boolean isOffset) {
         this(name, tag, Arrays.asList(dataType), length, exifDirectory,
                 isOffset);
-    }
-
-    public TagInfo(final String name, final int tag, final FieldType dataType, final int length) {
-        this(name, tag, Arrays.asList(dataType), length,
-                TiffDirectoryType.EXIF_DIRECTORY_UNKNOWN);
-    }
-
-    public TagInfo(final String name, final int tag, final FieldType dataType) {
-        this(name, tag, dataType, LENGTH_UNKNOWN,
-                TiffDirectoryType.EXIF_DIRECTORY_UNKNOWN);
     }
 
     public TagInfo(final String name, final int tag, final List<FieldType> dataTypes, final int length,
@@ -75,18 +74,8 @@ public class TagInfo {
         this.isOffset = isOffset;
     }
 
-    /**
-     *
-     * @param entry the TIFF field whose value to return
-     * @return the value of the TIFF field
-     * @throws ImageReadException thrown by subclasses
-     */
-    public Object getValue(final TiffField entry) throws ImageReadException {
-        return entry.getFieldType().getValue(entry);
-    }
-
     public byte[] encodeValue(final FieldType fieldType, final Object value, final ByteOrder byteOrder)
-            throws ImageWriteException {
+            throws ImagingException {
         return fieldType.writeData(value, byteOrder);
     }
 
@@ -94,10 +83,14 @@ public class TagInfo {
         return tag + " (0x" + Integer.toHexString(tag) + ": " + name + "): ";
     }
 
-    @Override
-    public String toString() {
-        return "[TagInfo. tag: " + tag + " (0x" + Integer.toHexString(tag)
-                + ", name: " + name + "]";
+    /**
+     *
+     * @param entry the TIFF field whose value to return
+     * @return the value of the TIFF field
+     * @throws ImagingException thrown by subclasses
+     */
+    public Object getValue(final TiffField entry) throws ImagingException {
+        return entry.getFieldType().getValue(entry);
     }
 
     public boolean isOffset() {
@@ -106,5 +99,11 @@ public class TagInfo {
 
     public boolean isText() {
         return false;
+    }
+
+    @Override
+    public String toString() {
+        return "[TagInfo. tag: " + tag + " (0x" + Integer.toHexString(tag)
+                + ", name: " + name + "]";
     }
 }

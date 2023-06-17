@@ -23,8 +23,8 @@ import java.util.List;
 
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class GifBaseTest extends ImagingTest {
@@ -33,9 +33,22 @@ public abstract class GifBaseTest extends ImagingTest {
 
     private final static String SINGLE_IMAGE_FOLDER_NAME = "single";
 
-    private static boolean isGif(final File file) throws IOException {
-        final ImageFormat format = Imaging.guessFormat(file);
-        return format == ImageFormats.GIF;
+    private static final ImageFilter IMAGE_FILTER = GifBaseTest::isGif;
+
+    private static final ImageFilter ANIMATED_IMAGE_FILTER = file -> isGif(file) && isAnimated(file);
+
+    private static final ImageFilter SINGLE_IMAGE_FILTER = file -> isGif(file) && isSingleImage(file);
+
+    protected static List<File> getAnimatedGifImages() throws IOException, ImagingException {
+        return getTestImages(ANIMATED_IMAGE_FILTER);
+    }
+
+    protected static List<File> getGifImages() throws IOException, ImagingException {
+        return getTestImages(IMAGE_FILTER);
+    }
+
+    protected static List<File> getGifImagesWithSingleImage() throws IOException, ImagingException {
+        return getTestImages(SINGLE_IMAGE_FILTER);
     }
 
     private static boolean isAnimated(final File file) {
@@ -44,28 +57,15 @@ public abstract class GifBaseTest extends ImagingTest {
         return type.getName().equals(ANIMATED_FOLDER_NAME);
     }
 
+    private static boolean isGif(final File file) throws IOException {
+        final ImageFormat format = Imaging.guessFormat(file);
+        return format == ImageFormats.GIF;
+    }
+
     private static boolean isSingleImage(final File file) {
         final File index = file.getParentFile();
         final File type = index.getParentFile();
         return type.getName().equals(SINGLE_IMAGE_FOLDER_NAME);
-    }
-
-    private static final ImageFilter IMAGE_FILTER = GifBaseTest::isGif;
-
-    private static final ImageFilter ANIMATED_IMAGE_FILTER = file -> isGif(file) && isAnimated(file);
-
-    private static final ImageFilter SINGLE_IMAGE_FILTER = file -> isGif(file) && isSingleImage(file);
-
-    protected static List<File> getGifImages() throws IOException, ImageReadException {
-        return getTestImages(IMAGE_FILTER);
-    }
-
-    protected static List<File> getAnimatedGifImages() throws IOException, ImageReadException {
-        return getTestImages(ANIMATED_IMAGE_FILTER);
-    }
-
-    protected static List<File> getGifImagesWithSingleImage() throws IOException, ImageReadException {
-        return getTestImages(SINGLE_IMAGE_FILTER);
     }
 
 }

@@ -18,9 +18,10 @@ package org.apache.commons.imaging.formats.jpeg;
 import org.apache.commons.imaging.common.XmpImagingParameters;
 
 /**
- * Jpeg format parameters.
+ * JPEG format parameters.
  *
  * @since 1.0-alpha3
  */
 public class JpegImagingParameters extends XmpImagingParameters<JpegImagingParameters> {
+    // empty
 }

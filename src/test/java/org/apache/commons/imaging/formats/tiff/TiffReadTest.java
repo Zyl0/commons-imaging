@@ -26,8 +26,8 @@ import java.util.List;
 import org.apache.commons.imaging.FormatCompliance;
 import org.apache.commons.imaging.ImageInfo;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.common.ImageMetadata;
-import org.apache.commons.imaging.common.bytesource.ByteSourceFile;
 import org.apache.commons.imaging.internal.Debug;
 import org.junit.jupiter.api.Test;
 
@@ -65,7 +65,7 @@ public class TiffReadTest extends TiffBaseTest {
             if(name.toLowerCase().contains("bad")){
                 continue;
             }
-            final ByteSourceFile byteSource = new ByteSourceFile(imageFile);
+            final ByteSource byteSource = ByteSource.file(imageFile);
             final TiffReader tiffReader = new TiffReader(true);
             final TiffContents contents = tiffReader.readDirectories(
                 byteSource,

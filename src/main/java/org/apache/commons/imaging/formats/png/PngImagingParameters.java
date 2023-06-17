@@ -21,7 +21,7 @@ import java.util.List;
 import org.apache.commons.imaging.common.XmpImagingParameters;
 
 /**
- * Png format parameters.
+ * PNG format parameters.
  * @since 1.0-alpha3
  */
 public class PngImagingParameters extends XmpImagingParameters<PngImagingParameters> {
@@ -33,11 +33,11 @@ public class PngImagingParameters extends XmpImagingParameters<PngImagingParamet
      */
     private byte bitDepth = DEFAULT_BIT_DEPTH;
 
-    private boolean forceIndexedColor = false;
+    private boolean forceIndexedColor;
 
-    private boolean forceTrueColor = false;
+    private boolean forceTrueColor;
 
-    private boolean predictorEnabled = false;
+    private boolean predictorEnabled;
 
     /**
      * Used in write operations to indicate the Physical Scale - sCAL.
@@ -46,14 +46,14 @@ public class PngImagingParameters extends XmpImagingParameters<PngImagingParamet
      *
      * @see org.apache.commons.imaging.formats.png.PhysicalScale
      */
-    private PhysicalScale physicalScale = null;
+    private PhysicalScale physicalScale;
 
     /**
-     * <p>Only used when writing Png images.</p>
+     * <p>Only used when writing PNG images.</p>
      *
      * <p>Valid values: a list of WriteTexts.</p>
      */
-    private List<? extends PngText> textChunks = null;
+    private List<? extends PngText> textChunks;
 
     public byte getBitDepth() {
         return bitDepth;

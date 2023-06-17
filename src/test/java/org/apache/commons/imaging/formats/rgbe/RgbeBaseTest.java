@@ -22,20 +22,20 @@ import java.util.List;
 
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class RgbeBaseTest extends ImagingTest {
+
+    private static final ImageFilter IMAGE_FILTER = RgbeBaseTest::isRgbe;
 
     private static boolean isRgbe(final File file) throws IOException {
         final ImageFormat format = Imaging.guessFormat(file);
         return format == ImageFormats.RGBE;
     }
 
-    private static final ImageFilter IMAGE_FILTER = RgbeBaseTest::isRgbe;
-
-    protected List<File> getRgbeImages() throws IOException, ImageReadException {
+    protected List<File> getRgbeImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 }

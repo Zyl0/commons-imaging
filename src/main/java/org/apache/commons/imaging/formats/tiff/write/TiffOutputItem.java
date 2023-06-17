@@ -18,30 +18,14 @@ package org.apache.commons.imaging.formats.tiff.write;
 
 import java.io.IOException;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.BinaryOutputStream;
 
 abstract class TiffOutputItem {
-    public static final long UNDEFINED_VALUE = -1;
-
-    private long offset = UNDEFINED_VALUE;
-
-    protected long getOffset() {
-        return offset;
-    }
-
-    protected void setOffset(final long offset) {
-        this.offset = offset;
-    }
-
-    public abstract int getItemLength();
-
-    public abstract String getItemDescription();
-
-    public abstract void writeItem(BinaryOutputStream bos) throws IOException,
-            ImageWriteException;
 
     public static class Value extends TiffOutputItem {
+
+        static final int SHALLOW_SIZE = 32;
         private final byte[] bytes;
         private final String name;
 
@@ -51,18 +35,18 @@ abstract class TiffOutputItem {
         }
 
         @Override
-        public int getItemLength() {
-            return bytes.length;
-        }
-
-        @Override
         public String getItemDescription() {
             return name;
         }
 
-        public void updateValue(final byte[] bytes) throws ImageWriteException {
+        @Override
+        public int getItemLength() {
+            return bytes.length;
+        }
+
+        public void updateValue(final byte[] bytes) throws ImagingException {
             if (this.bytes.length != bytes.length) {
-                throw new ImageWriteException("Updated data size mismatch: "
+                throw new ImagingException("Updated data size mismatch: "
                         + this.bytes.length + " vs. " + bytes.length);
             }
             System.arraycopy(bytes, 0, this.bytes, 0, bytes.length);
@@ -70,8 +54,27 @@ abstract class TiffOutputItem {
 
         @Override
         public void writeItem(final BinaryOutputStream bos) throws IOException,
-                ImageWriteException {
+                ImagingException {
             bos.write(bytes);
         }
     }
+
+    public static final long UNDEFINED_VALUE = -1;
+
+    private long offset = UNDEFINED_VALUE;
+
+    public abstract String getItemDescription();
+
+    public abstract int getItemLength();
+
+    protected long getOffset() {
+        return offset;
+    }
+
+    protected void setOffset(final long offset) {
+        this.offset = offset;
+    }
+
+    public abstract void writeItem(BinaryOutputStream bos) throws IOException,
+            ImagingException;
 }

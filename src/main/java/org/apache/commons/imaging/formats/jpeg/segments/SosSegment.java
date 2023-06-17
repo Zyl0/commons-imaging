@@ -24,18 +24,12 @@ import java.io.InputStream;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import org.apache.commons.imaging.common.Allocator;
+
 public class SosSegment extends Segment {
 
-    private static final Logger LOGGER = Logger.getLogger(SosSegment.class.getName());
-
-    public final int numberOfComponents;
-    private final Component[] components;
-    public final int startOfSpectralSelection;
-    public final int endOfSpectralSelection;
-    public final int successiveApproximationBitHigh;
-    public final int successiveApproximationBitLow;
-
     public static class Component {
+        static final int SHALLOW_SIZE = 24;
         public final int scanComponentSelector;
         public final int dcCodingTableSelector;
         public final int acCodingTableSelector;
@@ -47,6 +41,15 @@ public class SosSegment extends Segment {
             this.acCodingTableSelector = acCodingTableSelector;
         }
     }
+
+    private static final Logger LOGGER = Logger.getLogger(SosSegment.class.getName());
+    public final int numberOfComponents;
+    private final Component[] components;
+    public final int startOfSpectralSelection;
+    public final int endOfSpectralSelection;
+    public final int successiveApproximationBitHigh;
+
+    public final int successiveApproximationBitLow;
 
     public SosSegment(final int marker, final byte[] segmentData) throws IOException {
         this(marker, segmentData.length, new ByteArrayInputStream(segmentData));
@@ -66,7 +69,7 @@ public class SosSegment extends Segment {
         // Debug.debug("number_of_components_in_scan",
         // numberOfComponents);
 
-        components = new Component[numberOfComponents];
+        components = Allocator.array(numberOfComponents, Component[]::new, Component.SHALLOW_SIZE);
         for (int i = 0; i < numberOfComponents; i++) {
             final int scanComponentSelector = readByte("scanComponentSelector", is, "Not a Valid JPEG File");
             // Debug.debug("scanComponentSelector", scanComponentSelector);

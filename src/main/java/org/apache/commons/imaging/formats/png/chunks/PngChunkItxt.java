@@ -16,23 +16,24 @@
  */
 package org.apache.commons.imaging.formats.png.chunks;
 
-import static org.apache.commons.imaging.common.BinaryFunctions.findNull;
-import static org.apache.commons.imaging.common.BinaryFunctions.getStreamBytes;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.InflaterInputStream;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
+import org.apache.commons.imaging.common.BinaryFunctions;
 import org.apache.commons.imaging.formats.png.PngConstants;
 import org.apache.commons.imaging.formats.png.PngText;
+import org.apache.commons.io.IOUtils;
 
 public class PngChunkItxt extends PngTextChunk {
-    public final String keyword;
-    public final String text;
 
-    /*
+    private final String keyword;
+    private final String text;
+
+    /**
      * The language tag defined in [RFC-3066] indicates the human language used
      * by the translated keyword and the text. Unlike the keyword, the language
      * tag is case-insensitive. It is an ISO 646.IRV:1991 [ISO 646] string
@@ -41,68 +42,58 @@ public class PngChunkItxt extends PngTextChunk {
      * is two or three letters long, it is an ISO language code [ISO-639]. If
      * the language tag is empty, the language is unspecified.
      */
-    public final String languageTag;
+    private final String languageTag;
 
-    public final String translatedKeyword;
+    private final String translatedKeyword;
 
     public PngChunkItxt(final int length, final int chunkType, final int crc, final byte[] bytes)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         super(length, chunkType, crc, bytes);
-        int terminator = findNull(bytes);
-        if (terminator < 0) {
-            throw new ImageReadException(
-                    "PNG iTXt chunk keyword is not terminated.");
-        }
+        int terminator = BinaryFunctions.findNull(bytes, "PNG iTXt chunk keyword is not terminated.");
 
         keyword = new String(bytes, 0, terminator, StandardCharsets.ISO_8859_1);
         int index = terminator + 1;
 
         final int compressionFlag = bytes[index++];
         if (compressionFlag != 0 && compressionFlag != 1) {
-            throw new ImageReadException(
-                    "PNG iTXt chunk has invalid compression flag: "
-                            + compressionFlag);
+            throw new ImagingException("PNG iTXt chunk has invalid compression flag: " + compressionFlag);
         }
 
         final boolean compressed = compressionFlag == 1;
 
         final int compressionMethod = bytes[index++];
         if (compressed && compressionMethod != PngConstants.COMPRESSION_DEFLATE_INFLATE) {
-            throw new ImageReadException("PNG iTXt chunk has unexpected compression method: " + compressionMethod);
+            throw new ImagingException("PNG iTXt chunk has unexpected compression method: " + compressionMethod);
         }
 
-        terminator = findNull(bytes, index);
-        if (terminator < 0) {
-            throw new ImageReadException("PNG iTXt chunk language tag is not terminated.");
-        }
-
+        terminator = BinaryFunctions.findNull(bytes, index, "PNG iTXt chunk language tag is not terminated.");
         languageTag = new String(bytes, index, terminator - index, StandardCharsets.ISO_8859_1);
         index = terminator + 1;
 
-        terminator = findNull(bytes, index);
-        if (terminator < 0) {
-            throw new ImageReadException("PNG iTXt chunk translated keyword is not terminated.");
-        }
-
+        terminator = BinaryFunctions.findNull(bytes, index, "PNG iTXt chunk translated keyword is not terminated.");
         translatedKeyword = new String(bytes, index, terminator - index, StandardCharsets.UTF_8);
         index = terminator + 1;
 
         if (compressed) {
             final int compressedTextLength = bytes.length - index;
 
-            final byte[] compressedText = new byte[compressedTextLength];
+            final byte[] compressedText = Allocator.byteArray(compressedTextLength);
             System.arraycopy(bytes, index, compressedText, 0, compressedTextLength);
 
-            text = new String(getStreamBytes(
-                    new InflaterInputStream(new ByteArrayInputStream(compressedText))), StandardCharsets.UTF_8);
+            text = new String(IOUtils.toByteArray(new InflaterInputStream(new ByteArrayInputStream(compressedText))), StandardCharsets.UTF_8);
 
         } else {
             text = new String(bytes, index, bytes.length - index, StandardCharsets.UTF_8);
         }
     }
 
+    @Override
+    public PngText getContents() {
+        return new PngText.Itxt(keyword, text, languageTag, translatedKeyword);
+    }
+
     /**
-     * @return Returns the keyword.
+     * @return Gets the keyword.
      */
     @Override
     public String getKeyword() {
@@ -110,15 +101,14 @@ public class PngChunkItxt extends PngTextChunk {
     }
 
     /**
-     * @return Returns the text.
+     * @return Gets the text.
      */
     @Override
     public String getText() {
         return text;
     }
 
-    @Override
-    public PngText getContents() {
-        return new PngText.Itxt(keyword, text, languageTag, translatedKeyword);
+    public String getTranslatedKeyword() {
+        return translatedKeyword;
     }
 }

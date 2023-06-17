@@ -23,104 +23,37 @@ import java.io.InputStream;
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
 import org.apache.commons.imaging.ImageInfo;
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 
 class PamFileInfo extends FileInfo {
-    private final int depth;
-    private final int maxval;
-    private final float scale;
-    private final int bytesPerSample;
-    private final boolean hasAlpha;
-    private final TupleReader tupleReader;
-
-    PamFileInfo(final int width, final int height, final int depth, final int maxval, final String tupleType) throws ImageReadException {
-        super(width, height, true);
-        this.depth = depth;
-        this.maxval = maxval;
-        if (maxval <= 0) {
-            throw new ImageReadException("PAM maxVal " + maxval
-                    + " is out of range [1;65535]");
-        }
-        if (maxval <= 255) {
-            scale = 255f;
-            bytesPerSample = 1;
-        } else if (maxval <= 65535) {
-            scale = 65535f;
-            bytesPerSample = 2;
-        } else {
-            throw new ImageReadException("PAM maxVal " + maxval
-                    + " is out of range [1;65535]");
+    private class ColorTupleReader extends TupleReader {
+        @Override
+        public ImageInfo.ColorType getColorType() {
+            return ImageInfo.ColorType.RGB;
         }
 
-        hasAlpha = tupleType.endsWith("_ALPHA");
-        switch (tupleType) {
-            case "BLACKANDWHITE":
-            case "BLACKANDWHITE_ALPHA":
-                tupleReader = new GrayscaleTupleReader(ImageInfo.ColorType.BW);
-                break;
-            case "GRAYSCALE":
-            case "GRAYSCALE_ALPHA":
-                tupleReader = new GrayscaleTupleReader(ImageInfo.ColorType.GRAYSCALE);
-                break;
-            case "RGB":
-            case "RGB_ALPHA":
-                tupleReader = new ColorTupleReader();
-                break;
-            default:
-                throw new ImageReadException("Unknown PAM tupletype '" + tupleType + "'");
+        @Override
+        public int getRGB(final InputStream is) throws IOException {
+            int red = readSample(is, bytesPerSample);
+            int green = readSample(is, bytesPerSample);
+            int blue = readSample(is, bytesPerSample);
+
+            red = scaleSample(red, scale, maxval);
+            green = scaleSample(green, scale, maxval);
+            blue = scaleSample(blue, scale, maxval);
+
+            int alpha =  0xff;
+            if (hasAlpha) {
+                alpha = readSample(is, bytesPerSample);
+                alpha = scaleSample(alpha, scale, maxval);
+            }
+
+            return ((0xff & alpha) << 24)
+                 | ((0xff & red)   << 16)
+                 | ((0xff & green) << 8)
+                 | ((0xff & blue)  << 0);
         }
     }
-
-    @Override
-    public boolean hasAlpha() {
-        return hasAlpha;
-    }
-
-    @Override
-    public int getNumComponents() {
-        return depth;
-    }
-
-    @Override
-    public int getBitDepth() {
-        return maxval;
-    }
-
-    @Override
-    public ImageFormat getImageType() {
-        return ImageFormats.PAM;
-    }
-
-    @Override
-    public String getImageTypeDescription() {
-        return "PAM: portable arbitrary map file format";
-    }
-
-    @Override
-    public String getMIMEType() {
-        return "image/x-portable-arbitrary-map";
-    }
-
-    @Override
-    public ImageInfo.ColorType getColorType() {
-        return tupleReader.getColorType();
-    }
-
-    @Override
-    public int getRGB(final WhiteSpaceReader wsr) throws IOException {
-        throw new UnsupportedOperationException("PAM files are only ever binary");
-    }
-
-    @Override
-    public int getRGB(final InputStream is) throws IOException {
-        return tupleReader.getRGB(is);
-    }
-
-    private abstract static class TupleReader {
-        public abstract ImageInfo.ColorType getColorType();
-        public abstract int getRGB(InputStream is) throws IOException;
-    }
-
     private class GrayscaleTupleReader extends TupleReader {
         private final ImageInfo.ColorType colorType;
 
@@ -150,33 +83,100 @@ class PamFileInfo extends FileInfo {
                  | ((0xff & sample) << 0);
         }
     }
+    private abstract static class TupleReader {
+        public abstract ImageInfo.ColorType getColorType();
+        public abstract int getRGB(InputStream is) throws IOException;
+    }
+    private final int depth;
+    private final int maxval;
+    private final float scale;
 
-    private class ColorTupleReader extends TupleReader {
-        @Override
-        public ImageInfo.ColorType getColorType() {
-            return ImageInfo.ColorType.RGB;
+    private final int bytesPerSample;
+
+    private final boolean hasAlpha;
+
+    private final TupleReader tupleReader;
+
+    PamFileInfo(final int width, final int height, final int depth, final int maxval, final String tupleType) throws ImagingException {
+        super(width, height, true);
+        this.depth = depth;
+        this.maxval = maxval;
+        if (maxval <= 0) {
+            throw new ImagingException("PAM maxVal " + maxval
+                    + " is out of range [1;65535]");
+        }
+        if (maxval <= 255) {
+            scale = 255f;
+            bytesPerSample = 1;
+        } else if (maxval <= 65535) {
+            scale = 65535f;
+            bytesPerSample = 2;
+        } else {
+            throw new ImagingException("PAM maxVal " + maxval
+                    + " is out of range [1;65535]");
         }
 
-        @Override
-        public int getRGB(final InputStream is) throws IOException {
-            int red = readSample(is, bytesPerSample);
-            int green = readSample(is, bytesPerSample);
-            int blue = readSample(is, bytesPerSample);
-
-            red = scaleSample(red, scale, maxval);
-            green = scaleSample(green, scale, maxval);
-            blue = scaleSample(blue, scale, maxval);
-
-            int alpha =  0xff;
-            if (hasAlpha) {
-                alpha = readSample(is, bytesPerSample);
-                alpha = scaleSample(alpha, scale, maxval);
-            }
-
-            return ((0xff & alpha) << 24)
-                 | ((0xff & red)   << 16)
-                 | ((0xff & green) << 8)
-                 | ((0xff & blue)  << 0);
+        hasAlpha = tupleType.endsWith("_ALPHA");
+        switch (tupleType) {
+            case "BLACKANDWHITE":
+            case "BLACKANDWHITE_ALPHA":
+                tupleReader = new GrayscaleTupleReader(ImageInfo.ColorType.BW);
+                break;
+            case "GRAYSCALE":
+            case "GRAYSCALE_ALPHA":
+                tupleReader = new GrayscaleTupleReader(ImageInfo.ColorType.GRAYSCALE);
+                break;
+            case "RGB":
+            case "RGB_ALPHA":
+                tupleReader = new ColorTupleReader();
+                break;
+            default:
+                throw new ImagingException("Unknown PAM tupletype '" + tupleType + "'");
         }
+    }
+
+    @Override
+    public int getBitDepth() {
+        return maxval;
+    }
+
+    @Override
+    public ImageInfo.ColorType getColorType() {
+        return tupleReader.getColorType();
+    }
+
+    @Override
+    public ImageFormat getImageType() {
+        return ImageFormats.PAM;
+    }
+
+    @Override
+    public String getImageTypeDescription() {
+        return "PAM: portable arbitrary map file format";
+    }
+
+    @Override
+    public String getMIMEType() {
+        return "image/x-portable-arbitrary-map";
+    }
+
+    @Override
+    public int getNumComponents() {
+        return depth;
+    }
+
+    @Override
+    public int getRGB(final InputStream is) throws IOException {
+        return tupleReader.getRGB(is);
+    }
+
+    @Override
+    public int getRGB(final WhiteSpaceReader wsr) throws IOException {
+        throw new UnsupportedOperationException("PAM files are only ever binary");
+    }
+
+    @Override
+    public boolean hasAlpha() {
+        return hasAlpha;
     }
 }

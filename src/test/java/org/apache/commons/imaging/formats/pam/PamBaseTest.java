@@ -23,20 +23,20 @@ import java.util.List;
 
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class PamBaseTest extends ImagingTest {
+
+    private static final ImageFilter IMAGE_FILTER = PamBaseTest::isPam;
 
     private static boolean isPam(final File file) throws IOException {
         final ImageFormat format = Imaging.guessFormat(file);
         return format == ImageFormats.PAM;
     }
 
-    private static final ImageFilter IMAGE_FILTER = PamBaseTest::isPam;
-
-    protected List<File> getPamImages() throws IOException, ImageReadException {
+    protected List<File> getPamImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 }

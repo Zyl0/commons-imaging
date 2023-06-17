@@ -22,25 +22,26 @@ import java.io.IOException;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.BinaryOutputStream;
 import org.apache.commons.imaging.formats.tiff.fieldtypes.FieldType;
 import org.apache.commons.imaging.formats.tiff.taginfos.TagInfo;
 
 public class TiffOutputField {
+    private static final String NEWLINE = System.lineSeparator();
+    protected static TiffOutputField createOffsetField(final TagInfo tagInfo,
+            final ByteOrder byteOrder) throws ImagingException {
+        return new TiffOutputField(tagInfo, FieldType.LONG, 1,
+                FieldType.LONG.writeData(0, byteOrder));
+    }
     public final int tag;
     public final TagInfo tagInfo;
     public final FieldType fieldType;
     public final int count;
     private byte[] bytes;
     private final TiffOutputItem.Value separateValueItem;
-    private int sortHint = -1;
-    private static final String NEWLINE = System.getProperty("line.separator");
 
-    public TiffOutputField(final TagInfo tagInfo, final FieldType fieldType, final int count,
-            final byte[] bytes) {
-        this(tagInfo.tag, tagInfo, fieldType, count, bytes);
-    }
+    private int sortHint = -1;
 
     public TiffOutputField(final int tag, final TagInfo tagInfo, final FieldType fieldType,
             final int count, final byte[] bytes) {
@@ -59,60 +60,34 @@ public class TiffOutputField {
         }
     }
 
-    protected static TiffOutputField createOffsetField(final TagInfo tagInfo,
-            final ByteOrder byteOrder) throws ImageWriteException {
-        return new TiffOutputField(tagInfo, FieldType.LONG, 1,
-                FieldType.LONG.writeData(0, byteOrder));
-    }
-
-    protected void writeField(final BinaryOutputStream bos) throws IOException,
-            ImageWriteException {
-        bos.write2Bytes(tag);
-        bos.write2Bytes(fieldType.getType());
-        bos.write4Bytes(count);
-
-        if (isLocalValue()) {
-            if (separateValueItem != null) {
-                throw new ImageWriteException("Unexpected separate value item.");
-            }
-            if (bytes.length > 4) {
-                throw new ImageWriteException(
-                        "Local value has invalid length: " + bytes.length);
-            }
-
-            bos.write(bytes);
-            final int remainder = TIFF_ENTRY_MAX_VALUE_LENGTH - bytes.length;
-            for (int i = 0; i < remainder; i++) {
-                bos.write(0);
-            }
-        } else {
-            if (separateValueItem == null) {
-                throw new ImageWriteException("Missing separate value item.");
-            }
-
-            bos.write4Bytes((int) separateValueItem.getOffset());
-        }
-    }
-
-    protected TiffOutputItem getSeperateValue() {
-        return separateValueItem;
-    }
-
-    protected final boolean isLocalValue() {
-        return bytes.length <= TIFF_ENTRY_MAX_VALUE_LENGTH;
+    public TiffOutputField(final TagInfo tagInfo, final FieldType fieldType, final int count,
+            final byte[] bytes) {
+        this(tagInfo.tag, tagInfo, fieldType, count, bytes);
     }
 
     public boolean bytesEqual(final byte[] data) {
         return Arrays.equals(bytes, data);
     }
 
-    protected void setData(final byte[] bytes) throws ImageWriteException {
+    protected TiffOutputItem getSeperateValue() {
+        return separateValueItem;
+    }
+
+    public int getSortHint() {
+        return sortHint;
+    }
+
+    protected final boolean isLocalValue() {
+        return bytes.length <= TIFF_ENTRY_MAX_VALUE_LENGTH;
+    }
+
+    protected void setData(final byte[] bytes) throws ImagingException {
         // if(tagInfo.isUnknown())
         // Debug.debug("unknown tag(0x" + Integer.toHexString(tag)
         // + ") setData", bytes);
 
         if (this.bytes.length != bytes.length) {
-            throw new ImageWriteException("Cannot change size of value.");
+            throw new ImagingException("Cannot change size of value.");
         }
 
         // boolean wasLocalValue = isLocalValue();
@@ -123,6 +98,10 @@ public class TiffOutputField {
         // if (isLocalValue() != wasLocalValue)
         // throw new Error("Bug. Locality disrupted! "
         // + tagInfo.getDescription());
+    }
+
+    public void setSortHint(final int sortHint) {
+        this.sortHint = sortHint;
     }
 
     @Override
@@ -152,11 +131,32 @@ public class TiffOutputField {
         return result.toString();
     }
 
-    public int getSortHint() {
-        return sortHint;
-    }
+    protected void writeField(final BinaryOutputStream bos) throws IOException,
+            ImagingException {
+        bos.write2Bytes(tag);
+        bos.write2Bytes(fieldType.getType());
+        bos.write4Bytes(count);
 
-    public void setSortHint(final int sortHint) {
-        this.sortHint = sortHint;
+        if (isLocalValue()) {
+            if (separateValueItem != null) {
+                throw new ImagingException("Unexpected separate value item.");
+            }
+            if (bytes.length > 4) {
+                throw new ImagingException(
+                        "Local value has invalid length: " + bytes.length);
+            }
+
+            bos.write(bytes);
+            final int remainder = TIFF_ENTRY_MAX_VALUE_LENGTH - bytes.length;
+            for (int i = 0; i < remainder; i++) {
+                bos.write(0);
+            }
+        } else {
+            if (separateValueItem == null) {
+                throw new ImagingException("Missing separate value item.");
+            }
+
+            bos.write4Bytes((int) separateValueItem.getOffset());
+        }
     }
 }

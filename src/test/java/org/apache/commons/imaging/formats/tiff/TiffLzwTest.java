@@ -27,54 +27,17 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.common.bytesource.ByteSource;
-import org.apache.commons.imaging.common.bytesource.ByteSourceFile;
-import org.apache.commons.imaging.common.mylzw.MyLzwCompressor;
-import org.apache.commons.imaging.common.mylzw.MyLzwDecompressor;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.internal.Debug;
+import org.apache.commons.imaging.mylzw.MyLzwCompressor;
+import org.apache.commons.imaging.mylzw.MyLzwDecompressor;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 public class TiffLzwTest extends TiffBaseTest {
 
-    @Test
-    public void testTrivial() throws Exception {
-        final byte[] bytes = { 0, };
-        compressRoundtripAndValidate(bytes);
-    }
-
-    @Test
-    public void testMedium() throws Exception {
-        final int LENGTH = 1024 * 32;
-        final byte[] bytes = new byte[LENGTH];
-        for (int modulator = 1; modulator < 255; modulator += 3) {
-            for (int i = 0; i < LENGTH; i++) {
-                bytes[i] = (byte) (0xff & (i % modulator));
-            }
-
-            compressRoundtripAndValidate(bytes);
-        }
-    }
-
-    @Disabled // FIXME fails with java.io.IOException: Bad Code: -1 codes: 258 code_size: 9, table: 4096
-    @Test
-    public void testTiffImageData() throws IOException, ImageReadException {
-        final List<File> images = getTiffImages();
-        for (final File image : images) {
-
-            Debug.debug("imageFile", image);
-
-            final ByteSource byteSource = new ByteSourceFile(image);
-            final List<byte[]> data = new TiffImageParser().collectRawImageData(byteSource, new TiffImagingParameters());
-
-            for (final byte[] bytes : data) {
-                decompressRoundtripAndValidate(bytes);
-            }
-        }
-    }
-
-    private void compressRoundtripAndValidate(final byte[] src) throws IOException, ImageReadException {
+    private void compressRoundtripAndValidate(final byte[] src) throws IOException, ImagingException {
         final boolean DEBUG = false;
 
         if (DEBUG) {
@@ -87,17 +50,17 @@ public class TiffLzwTest extends TiffBaseTest {
         final List<Integer> codes = new ArrayList<>();
         final MyLzwCompressor.Listener compressionListener = new MyLzwCompressor.Listener() {
             @Override
+            public void clearCode(final int code) {
+                codes.add(code);
+            }
+
+            @Override
             public void dataCode(final int code) {
                 codes.add(code);
             }
 
             @Override
             public void eoiCode(final int code) {
-                codes.add(code);
-            }
-
-            @Override
-            public void clearCode(final int code) {
                 codes.add(code);
             }
 
@@ -157,8 +120,7 @@ public class TiffLzwTest extends TiffBaseTest {
         final InputStream is = new ByteArrayInputStream(compressed);
         final MyLzwDecompressor decompressor = new MyLzwDecompressor(
                 LZW_MINIMUM_CODE_SIZE, ByteOrder.BIG_ENDIAN,
-                decompressionListener);
-        decompressor.setTiffLZWMode();
+                true, decompressionListener);
         final byte[] decompressed = decompressor.decompress(is, src.length);
 
         assertEquals(src.length, decompressed.length);
@@ -167,7 +129,7 @@ public class TiffLzwTest extends TiffBaseTest {
         }
     }
 
-    private void decompressRoundtripAndValidate(final byte[] src) throws IOException, ImageReadException {
+    private void decompressRoundtripAndValidate(final byte[] src) throws IOException, ImagingException {
         Debug.debug();
         Debug.debug("roundtripAndValidate: " + src.length);
         Debug.debug();
@@ -194,21 +156,19 @@ public class TiffLzwTest extends TiffBaseTest {
         final InputStream is = new ByteArrayInputStream(src);
         final MyLzwDecompressor decompressor = new MyLzwDecompressor(
                 LZW_MINIMUM_CODE_SIZE, ByteOrder.BIG_ENDIAN,
-                decompressionListener);
-        decompressor.setTiffLZWMode();
+                true, decompressionListener);
         final byte[] decompressed = decompressor.decompress(is, src.length);
 
         final MyLzwCompressor.Listener compressionListener = new MyLzwCompressor.Listener() {
 
             int clearCode, eoiCode;
 
-            @Override
-            public void init(final int clearCode, final int eoiCode) {
-                this.clearCode = clearCode;
-                this.eoiCode = eoiCode;
-            }
-
             int index = 0;
+
+            @Override
+            public void clearCode(final int code) {
+                code(code);
+            }
 
             private void code(final int code) {
 
@@ -251,8 +211,9 @@ public class TiffLzwTest extends TiffBaseTest {
             }
 
             @Override
-            public void clearCode(final int code) {
-                code(code);
+            public void init(final int clearCode, final int eoiCode) {
+                this.clearCode = clearCode;
+                this.eoiCode = eoiCode;
             }
 
         };
@@ -265,6 +226,42 @@ public class TiffLzwTest extends TiffBaseTest {
         for (int i = 0; i < src.length; i++) {
             assertEquals(src[i], compressed[i]);
         }
+    }
+
+    @Test
+    public void testMedium() throws Exception {
+        final int LENGTH = 1024 * 32;
+        final byte[] bytes = new byte[LENGTH];
+        for (int modulator = 1; modulator < 255; modulator += 3) {
+            for (int i = 0; i < LENGTH; i++) {
+                bytes[i] = (byte) (0xff & (i % modulator));
+            }
+
+            compressRoundtripAndValidate(bytes);
+        }
+    }
+
+    @Disabled // FIXME fails with java.io.IOException: Bad Code: -1 codes: 258 code_size: 9, table: 4096
+    @Test
+    public void testTiffImageData() throws IOException, ImagingException {
+        final List<File> images = getTiffImages();
+        for (final File image : images) {
+
+            Debug.debug("imageFile", image);
+
+            final ByteSource byteSource = ByteSource.file(image);
+            final List<byte[]> data = new TiffImageParser().collectRawImageData(byteSource, new TiffImagingParameters());
+
+            for (final byte[] bytes : data) {
+                decompressRoundtripAndValidate(bytes);
+            }
+        }
+    }
+
+    @Test
+    public void testTrivial() throws Exception {
+        final byte[] bytes = { 0, };
+        compressRoundtripAndValidate(bytes);
     }
 
 }

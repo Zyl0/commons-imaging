@@ -20,7 +20,8 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.formats.tiff.TiffField;
 
 public class FieldTypeAscii extends FieldType {
@@ -39,7 +40,7 @@ public class FieldTypeAscii extends FieldType {
                 nullCount++;
             }
         }
-        final String[] strings = new String[nullCount];
+        final String[] strings = Allocator.array(nullCount, String[]::new, 24);
         int stringsAdded = 0;
         strings[0] = ""; // if we have a 0 length string
         int nextStringPos = 0;
@@ -67,7 +68,7 @@ public class FieldTypeAscii extends FieldType {
     }
 
     @Override
-    public byte[] writeData(final Object o, final ByteOrder byteOrder) throws ImageWriteException {
+    public byte[] writeData(final Object o, final ByteOrder byteOrder) throws ImagingException {
         if (o instanceof byte[]) {
             final byte[] bytes = (byte[]) o;
             final byte[] result = Arrays.copyOf(bytes, bytes.length + 1);
@@ -81,7 +82,7 @@ public class FieldTypeAscii extends FieldType {
             return result;
         }
         if (!(o instanceof String[])) {
-            throw new ImageWriteException("Unknown data type: " + o);
+            throw new ImagingException("Unknown data type: " + o);
         }
         final String[] strings = (String[]) o;
         int totalLength = 0;
@@ -89,7 +90,7 @@ public class FieldTypeAscii extends FieldType {
             final byte[] bytes = string.getBytes(StandardCharsets.UTF_8);
             totalLength += (bytes.length + 1);
         }
-        final byte[] result = new byte[totalLength];
+        final byte[] result = Allocator.byteArray(totalLength);
         int position = 0;
         for (final String string : strings) {
             final byte[] bytes = string.getBytes(StandardCharsets.UTF_8);

@@ -27,11 +27,12 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteOrder;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.ImageBuilder;
-import org.apache.commons.imaging.formats.tiff.TiffRasterData;
 import org.apache.commons.imaging.formats.tiff.TiffDirectory;
 import org.apache.commons.imaging.formats.tiff.TiffImageData;
+import org.apache.commons.imaging.formats.tiff.TiffRasterData;
 import org.apache.commons.imaging.formats.tiff.TiffRasterDataFloat;
 import org.apache.commons.imaging.formats.tiff.TiffRasterDataInt;
 import org.apache.commons.imaging.formats.tiff.constants.TiffPlanarConfiguration;
@@ -76,7 +77,7 @@ public final class DataReaderTiled extends ImageDataReader {
     }
 
     private void interpretTile(final ImageBuilder imageBuilder, final byte[] bytes,
-        final int startX, final int startY, final int xLimit, final int yLimit) throws ImageReadException, IOException {
+        final int startX, final int startY, final int xLimit, final int yLimit) throws ImagingException, IOException {
 
         // March 2020 change to handle floating-point with compression
         // for the compressed floating-point, there is a standard that allows
@@ -184,7 +185,7 @@ public final class DataReaderTiled extends ImageDataReader {
             int tileX = 0;
             int tileY = 0;
 
-            int[] samples = new int[bitsPerSampleLength];
+            int[] samples = Allocator.intArray(bitsPerSampleLength);
             resetPredictor();
             for (int i = 0; i < pixelsPerTile; i++) {
 
@@ -218,7 +219,7 @@ public final class DataReaderTiled extends ImageDataReader {
     public ImageBuilder readImageData(final Rectangle subImageSpecification,
         final boolean hasAlpha,
         final boolean isAlphaPreMultiplied)
-            throws ImageReadException, IOException {
+            throws IOException, ImagingException {
 
         final Rectangle subImage;
         if (subImageSpecification == null) {
@@ -281,20 +282,20 @@ public final class DataReaderTiled extends ImageDataReader {
 
     @Override
     public TiffRasterData readRasterData(final Rectangle subImage)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         switch (sampleFormat) {
             case TiffTagConstants.SAMPLE_FORMAT_VALUE_IEEE_FLOATING_POINT:
                 return readRasterDataFloat(subImage);
             case TiffTagConstants.SAMPLE_FORMAT_VALUE_TWOS_COMPLEMENT_SIGNED_INTEGER:
                 return readRasterDataInt(subImage);
             default:
-                throw new ImageReadException("Unsupported sample format, value="
+                throw new ImagingException("Unsupported sample format, value="
                         + sampleFormat);
         }
     }
 
     private TiffRasterData readRasterDataFloat(final Rectangle subImage)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         final int bitsPerRow = tileWidth * bitsPerPixel;
         final int bytesPerRow = (bitsPerRow + 7) / 8;
         final int bytesPerTile = bytesPerRow * tileLength;
@@ -313,7 +314,7 @@ public final class DataReaderTiled extends ImageDataReader {
             rasterWidth = width;
             rasterHeight = height;
         }
-        final float[] rasterDataFloat = new float[rasterWidth * rasterHeight * samplesPerPixel];
+        final float[] rasterDataFloat = Allocator.floatArray(rasterWidth * rasterHeight * samplesPerPixel);
 
         // tileWidth is the width of the tile
         // tileLength is the height of the tile
@@ -346,7 +347,7 @@ public final class DataReaderTiled extends ImageDataReader {
     }
 
     private TiffRasterData readRasterDataInt(final Rectangle subImage)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         final int bitsPerRow = tileWidth * bitsPerPixel;
         final int bytesPerRow = (bitsPerRow + 7) / 8;
         final int bytesPerTile = bytesPerRow * tileLength;
@@ -365,7 +366,7 @@ public final class DataReaderTiled extends ImageDataReader {
             rasterWidth = width;
             rasterHeight = height;
         }
-        final int[] rasterDataInt = new int[rasterWidth * rasterHeight];
+        final int[] rasterDataInt = Allocator.intArray(rasterWidth * rasterHeight);
 
         // tileWidth is the width of the tile
         // tileLength is the height of the tile

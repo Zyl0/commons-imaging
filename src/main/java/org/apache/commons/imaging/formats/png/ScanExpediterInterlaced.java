@@ -20,7 +20,7 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.formats.png.chunks.PngChunkPlte;
 import org.apache.commons.imaging.formats.png.transparencyfilters.TransparencyFilter;
 
@@ -35,22 +35,15 @@ class ScanExpediterInterlaced extends ScanExpediter {
     ScanExpediterInterlaced(final int width, final int height, final InputStream is,
             final BufferedImage bi,
             final PngColorType pngColorType, final int bitDepth, final int bitsPerPixel,
-            final PngChunkPlte fPNGChunkPLTE,
+            final PngChunkPlte pngChunkPLTE,
             final GammaCorrection gammaCorrection,
             final TransparencyFilter transparencyFilter) {
         super(width, height, is, bi, pngColorType, bitDepth, bitsPerPixel,
-                fPNGChunkPLTE, gammaCorrection, transparencyFilter);
-    }
-
-    private void visit(final int x, final int y, final BufferedImage bi, final BitParser fBitParser,
-            final int pixelIndexInScanline)
-            throws ImageReadException, IOException {
-        final int rgb = getRGB(fBitParser, pixelIndexInScanline);
-        bi.setRGB(x, y, rgb);
+                pngChunkPLTE, gammaCorrection, transparencyFilter);
     }
 
     @Override
-    public void drive() throws ImageReadException, IOException {
+    public void drive() throws ImagingException, IOException {
 
         int pass = 1;
         while (pass <= 7) {
@@ -86,5 +79,12 @@ class ScanExpediterInterlaced extends ScanExpediter {
             }
             pass = pass + 1;
         }
+    }
+
+    private void visit(final int x, final int y, final BufferedImage bi, final BitParser fBitParser,
+            final int pixelIndexInScanline)
+            throws ImagingException, IOException {
+        final int rgb = getRGB(fBitParser, pixelIndexInScanline);
+        bi.setRGB(x, y, rgb);
     }
 }

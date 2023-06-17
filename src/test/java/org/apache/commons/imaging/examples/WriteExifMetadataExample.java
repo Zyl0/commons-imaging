@@ -22,9 +22,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageMetadata;
 import org.apache.commons.imaging.common.RationalNumber;
 import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
@@ -36,14 +35,6 @@ import org.apache.commons.imaging.formats.tiff.write.TiffOutputSet;
 import org.apache.commons.io.FileUtils;
 
 public class WriteExifMetadataExample {
-    public void removeExifMetadata(final File jpegImageFile, final File dst)
-            throws IOException, ImageReadException, ImageWriteException {
-        try (FileOutputStream fos = new FileOutputStream(dst);
-                OutputStream os = new BufferedOutputStream(fos)) {
-            new ExifRewriter().removeExifMetadata(jpegImageFile, os);
-        }
-    }
-
     /**
      * This example illustrates how to add/update EXIF metadata in a JPEG file.
      *
@@ -52,11 +43,11 @@ public class WriteExifMetadataExample {
      * @param dst
      *            The output file.
      * @throws IOException
-     * @throws ImageReadException
-     * @throws ImageWriteException
+     * @throws ImagingException
+     * @throws ImagingException
      */
     public void changeExifMetadata(final File jpegImageFile, final File dst)
-            throws IOException, ImageReadException, ImageWriteException {
+            throws IOException, ImagingException, ImagingException {
 
         try (FileOutputStream fos = new FileOutputStream(dst);
                 OutputStream os = new BufferedOutputStream(fos)) {
@@ -130,6 +121,14 @@ public class WriteExifMetadataExample {
         }
     }
 
+    public void removeExifMetadata(final File jpegImageFile, final File dst)
+            throws IOException, ImagingException, ImagingException {
+        try (FileOutputStream fos = new FileOutputStream(dst);
+                OutputStream os = new BufferedOutputStream(fos)) {
+            new ExifRewriter().removeExifMetadata(jpegImageFile, os);
+        }
+    }
+
     /**
      * This example illustrates how to remove a tag (if present) from EXIF
      * metadata in a JPEG file.
@@ -142,11 +141,11 @@ public class WriteExifMetadataExample {
      * @param dst
      *            The output file.
      * @throws IOException
-     * @throws ImageReadException
-     * @throws ImageWriteException
+     * @throws ImagingException
+     * @throws ImagingException
      */
     public void removeExifTag(final File jpegImageFile, final File dst) throws IOException,
-            ImageReadException, ImageWriteException {
+            ImagingException, ImagingException {
         try (FileOutputStream fos = new FileOutputStream(dst);
                 OutputStream os = new BufferedOutputStream(fos)) {
             TiffOutputSet outputSet = null;
@@ -215,11 +214,11 @@ public class WriteExifMetadataExample {
      * @param dst
      *            The output file.
      * @throws IOException
-     * @throws ImageReadException
-     * @throws ImageWriteException
+     * @throws ImagingException
+     * @throws ImagingException
      */
     public void setExifGPSTag(final File jpegImageFile, final File dst) throws IOException,
-            ImageReadException, ImageWriteException {
+            ImagingException, ImagingException {
         try (FileOutputStream fos = new FileOutputStream(dst);
                 OutputStream os = new BufferedOutputStream(fos)) {
             TiffOutputSet outputSet = null;

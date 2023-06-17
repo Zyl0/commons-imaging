@@ -18,6 +18,7 @@ package org.apache.commons.imaging.formats.tiff.write;
 
 import java.util.Arrays;
 
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.formats.tiff.TiffElement;
 
 class ImageDataOffsets {
@@ -29,7 +30,7 @@ class ImageDataOffsets {
         this.imageDataOffsets = imageDataOffsets;
         this.imageDataOffsetsField = imageDataOffsetsField;
 
-        outputItems = new TiffOutputItem[imageData.length];
+        outputItems = Allocator.array(imageData.length, TiffOutputItem[]::new, TiffOutputItem.Value.SHALLOW_SIZE);
         Arrays.setAll(outputItems, i -> new TiffOutputItem.Value("TIFF image data", imageData[i].getData()));
 
     }

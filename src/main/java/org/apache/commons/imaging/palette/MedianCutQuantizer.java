@@ -22,7 +22,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.internal.Debug;
 
 public class MedianCutQuantizer {
@@ -32,6 +33,23 @@ public class MedianCutQuantizer {
         this.ignoreAlpha = ignoreAlpha;
     }
 
+    public Map<Integer, ColorCount> groupColors(final BufferedImage image, final int maxColors) {
+        final int max = Integer.MAX_VALUE;
+
+        for (int i = 0; i < 8; i++) {
+            int mask = 0xff & (0xff << i);
+            mask = mask | (mask << 8) | (mask << 16) | (mask << 24);
+
+            Debug.debug("mask(" + i + "): " + mask + " (" + Integer.toHexString(mask) + ")");
+
+            final Map<Integer, ColorCount> result = groupColors1(image, max, mask);
+            if (result != null) {
+                return result;
+            }
+        }
+        throw new Error("");
+    }
+
     private Map<Integer, ColorCount> groupColors1(final BufferedImage image, final int max,
             final int mask) {
         final Map<Integer, ColorCount> colorMap = new HashMap<>();
@@ -39,7 +57,7 @@ public class MedianCutQuantizer {
         final int width = image.getWidth();
         final int height = image.getHeight();
 
-        final int[] row = new int[width];
+        final int[] row = Allocator.intArray(width);
         for (int y = 0; y < height; y++) {
             image.getRGB(0, y, width, 1, row, 0, width);
             for (int x = 0; x < width; x++) {
@@ -65,33 +83,16 @@ public class MedianCutQuantizer {
         return colorMap;
     }
 
-    public Map<Integer, ColorCount> groupColors(final BufferedImage image, final int maxColors) {
-        final int max = Integer.MAX_VALUE;
-
-        for (int i = 0; i < 8; i++) {
-            int mask = 0xff & (0xff << i);
-            mask = mask | (mask << 8) | (mask << 16) | (mask << 24);
-
-            Debug.debug("mask(" + i + "): " + mask + " (" + Integer.toHexString(mask) + ")");
-
-            final Map<Integer, ColorCount> result = groupColors1(image, max, mask);
-            if (result != null) {
-                return result;
-            }
-        }
-        throw new Error("");
-    }
-
     public Palette process(final BufferedImage image, final int maxColors,
             final MedianCut medianCut)
-            throws ImageWriteException {
+            throws ImagingException {
         final Map<Integer, ColorCount> colorMap = groupColors(image, maxColors);
 
         final int discreteColors = colorMap.size();
         if (discreteColors <= maxColors) {
             Debug.debug("lossless palette: " + discreteColors);
 
-            final int[] palette = new int[discreteColors];
+            final int[] palette = Allocator.intArray(discreteColors);
             final List<ColorCount> colorCounts = new ArrayList<>(
                     colorMap.values());
 
@@ -121,7 +122,7 @@ public class MedianCutQuantizer {
         final int paletteSize = colorGroups.size();
         Debug.debug("palette size: " + paletteSize);
 
-        final int[] palette = new int[paletteSize];
+        final int[] palette = Allocator.intArray(paletteSize);
 
         for (int i = 0; i < colorGroups.size(); i++) {
             final ColorGroup colorGroup = colorGroups.get(i);
@@ -131,13 +132,13 @@ public class MedianCutQuantizer {
             colorGroup.paletteIndex = i;
 
             if (colorGroup.getColorCounts().isEmpty()) {
-                throw new ImageWriteException("empty color_group: "
+                throw new ImagingException("Empty color_group: "
                         + colorGroup);
             }
         }
 
         if (paletteSize > discreteColors) {
-            throw new ImageWriteException("palette_size > discrete_colors");
+            throw new ImagingException("palette_size > discrete_colors");
         }
 
         return new MedianCutPalette(root, palette);

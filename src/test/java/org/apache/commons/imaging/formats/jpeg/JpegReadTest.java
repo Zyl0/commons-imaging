@@ -17,24 +17,24 @@
 
 package org.apache.commons.imaging.formats.jpeg;
 
-import org.apache.commons.imaging.ImageInfo;
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.Imaging;
-import org.apache.commons.imaging.common.ImageMetadata;
-import org.apache.commons.imaging.common.bytesource.ByteSourceFile;
-import org.apache.commons.imaging.formats.tiff.TiffImagingParameters;
-import org.apache.commons.imaging.internal.Debug;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.MethodSource;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.apache.commons.imaging.ImageInfo;
+import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
+import org.apache.commons.imaging.common.ImageMetadata;
+import org.apache.commons.imaging.formats.tiff.TiffImagingParameters;
+import org.apache.commons.imaging.internal.Debug;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 public class JpegReadTest extends JpegBaseTest {
 
@@ -46,7 +46,7 @@ public class JpegReadTest extends JpegBaseTest {
     @MethodSource("data")
     public void test(final File imageFile) throws Exception {
         final JpegImageParser jpegImageParser = new JpegImageParser();
-        final ImageMetadata metadata = jpegImageParser.getExifMetadata(new ByteSourceFile(imageFile), new TiffImagingParameters());
+        final ImageMetadata metadata = jpegImageParser.getExifMetadata(ByteSource.file(imageFile), new TiffImagingParameters());
         // TODO only run this tests with images that have metadata...
         //assertNotNull(metadata);
         Debug.debug("metadata", metadata);
@@ -59,7 +59,7 @@ public class JpegReadTest extends JpegBaseTest {
         try {
             final BufferedImage image = Imaging.getBufferedImage(imageFile);
             assertNotNull(image);
-        } catch (final ImageReadException imageReadException) {
+        } catch (final ImagingException imageReadException) {
             assertEquals("Only sequential, baseline JPEGs are supported at the moment",
                     imageReadException.getMessage());
         }
@@ -79,7 +79,7 @@ public class JpegReadTest extends JpegBaseTest {
         final String input = "/images/jpeg/oss-fuzz-33458/clusterfuzz-testcase-minimized-ImagingJpegFuzzer-4548690447564800";
         final String file = JpegReadTest.class.getResource(input).getFile();
         final JpegImageParser parser = new JpegImageParser();
-        assertThrows(ImageReadException.class, () -> parser.getBufferedImage(new ByteSourceFile(new File(file)), new JpegImagingParameters()));
+        assertThrows(ImagingException.class, () -> parser.getBufferedImage(ByteSource.file(new File(file)), new JpegImagingParameters()));
     }
 
 }

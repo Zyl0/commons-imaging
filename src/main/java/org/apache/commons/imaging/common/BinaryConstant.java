@@ -27,6 +27,10 @@ public class BinaryConstant {
         this.value = value.clone();
     }
 
+    public boolean equals(final byte[] bytes) {
+        return Arrays.equals(value, bytes);
+    }
+
     @Override
     public boolean equals(final Object obj) {
         if (obj == null) {
@@ -39,20 +43,8 @@ public class BinaryConstant {
         return equals(other.value);
     }
 
-    public boolean equals(final byte[] bytes) {
-        return Arrays.equals(value, bytes);
-    }
-
-    public boolean equals(final byte[] bytes, final int offset, final int length) {
-        if (value.length != length) {
-            return false;
-        }
-        for (int i = 0; i < length; i++) {
-            if (value[i] != bytes[offset + i]) {
-                return false;
-            }
-        }
-        return true;
+    public byte get(final int i) {
+        return value[i];
     }
 
     @Override
@@ -60,16 +52,8 @@ public class BinaryConstant {
         return Arrays.hashCode(value);
     }
 
-    public byte get(final int i) {
-        return value[i];
-    }
-
     public int size() {
         return value.length;
-    }
-
-    public byte[] toByteArray() {
-        return value.clone();
     }
 
     public void writeTo(final OutputStream os) throws IOException {

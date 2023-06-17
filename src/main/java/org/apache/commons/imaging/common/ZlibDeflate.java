@@ -22,8 +22,7 @@ import java.util.zip.DataFormatException;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.Inflater;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 
 /**
  * <p>
@@ -39,44 +38,44 @@ import org.apache.commons.imaging.ImageWriteException;
 public class ZlibDeflate {
 
     /**
+     * Compress the byte[] using ZLIB deflate compression.
+     *
+     * @param bytes The bytes to compress
+     *
+     * @return The compressed bytes.
+     * @throws ImagingException if the bytes could not be compressed.
+     * @see DeflaterOutputStream
+     */
+    public static byte[] compress(final byte[] bytes) throws ImagingException {
+        final ByteArrayOutputStream out = new ByteArrayOutputStream(Allocator.checkByteArray(bytes.length / 2));
+        try (DeflaterOutputStream compressOut = new DeflaterOutputStream(out)) {
+            compressOut.write(bytes);
+        } catch (final IOException e) {
+            throw new ImagingException("Unable to compress image", e);
+        }
+        return out.toByteArray();
+    }
+
+    /**
      * Compress the byte[] using ZLIB deflate decompression.
      *
      * @param bytes The bytes to decompress
      * @param expectedSize The expected size of the decompressed byte[].
      *
      * @return The decompressed bytes.
-     * @throws ImageReadException if the bytes could not be decompressed.
+     * @throws ImagingException if the bytes could not be decompressed.
      * @see Inflater
      */
-    public static byte[] decompress(final byte[] bytes, final int expectedSize) throws ImageReadException {
+    public static byte[] decompress(final byte[] bytes, final int expectedSize) throws ImagingException {
         try {
             final Inflater inflater = new Inflater();
             inflater.setInput(bytes);
-            final byte[] result = new byte[expectedSize];
+            final byte[] result = Allocator.byteArray(expectedSize);
             inflater.inflate(result);
             return result;
         } catch (final DataFormatException e) {
-            throw new ImageReadException("Unable to decompress image", e);
+            throw new ImagingException("Unable to decompress image", e);
         }
-    }
-
-    /**
-     * Compress the byte[] using ZLIB deflate compression.
-     *
-     * @param bytes The bytes to compress
-     *
-     * @return The compressed bytes.
-     * @throws ImageWriteException if the bytes could not be compressed.
-     * @see DeflaterOutputStream
-     */
-    public static byte[] compress(final byte[] bytes) throws ImageWriteException {
-        final ByteArrayOutputStream out = new ByteArrayOutputStream(bytes.length / 2);
-        try (DeflaterOutputStream compressOut = new DeflaterOutputStream(out)) {
-            compressOut.write(bytes);
-        } catch (final IOException e) {
-            throw new ImageWriteException("Unable to compress image", e);
-        }
-        return out.toByteArray();
     }
 
 }

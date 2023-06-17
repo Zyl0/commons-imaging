@@ -25,7 +25,6 @@ import java.util.List;
 
 import javax.imageio.ImageIO;
 
-import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.Imaging;
 import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageMetadata;
@@ -37,9 +36,9 @@ import org.apache.commons.imaging.formats.tiff.taginfos.TagInfo;
 import org.apache.commons.imaging.internal.Debug;
 
 public class JpegImageMetadata implements ImageMetadata {
+    private static final String NEWLINE = System.lineSeparator();
     private final JpegPhotoshopMetadata photoshop;
     private final TiffImageMetadata exif;
-    private static final String NEWLINE = System.getProperty("line.separator");
 
     public JpegImageMetadata(final JpegPhotoshopMetadata photoshop,
             final TiffImageMetadata exif) {
@@ -47,18 +46,14 @@ public class JpegImageMetadata implements ImageMetadata {
         this.exif = exif;
     }
 
-    public TiffImageMetadata getExif() {
-        return exif;
-    }
-
-    public JpegPhotoshopMetadata getPhotoshop() {
-        return photoshop;
+    public void dump() {
+        Debug.debug(this.toString());
     }
 
     public TiffField findEXIFValue(final TagInfo tagInfo) {
         try {
             return exif != null ? exif.findField(tagInfo) : null;
-        } catch (final ImageReadException cannotHappen) {
+        } catch (final ImagingException cannotHappen) {
             return null;
         }
     }
@@ -66,25 +61,62 @@ public class JpegImageMetadata implements ImageMetadata {
     public TiffField findEXIFValueWithExactMatch(final TagInfo tagInfo) {
         try {
             return exif != null ? exif.findField(tagInfo, true) : null;
-        } catch (final ImageReadException cannotHappen) {
+        } catch (final ImagingException cannotHappen) {
             return null;
         }
     }
 
-    /**
-     * Returns the size of the first JPEG thumbnail found in the EXIF metadata.
-     *
-     * @return Thumbnail width and height or null if no thumbnail.
-     * @throws ImageReadException if it fails to read the image
-     * @throws IOException if it fails to read the image size
-     */
-    public Dimension getEXIFThumbnailSize() throws ImageReadException,
-            IOException {
-        final byte[] data = getEXIFThumbnailData();
+    public TiffImageMetadata getExif() {
+        return exif;
+    }
 
-        if (data != null) {
-            return Imaging.getImageSize(data);
+    /**
+     * Get the thumbnail image if available.
+     *
+     * @return the thumbnail image. May be {@code null} if no image could
+     *         be found.
+     * @throws ImagingException if it fails to read the image
+     * @throws IOException if it fails to get the thumbnail or to read the image data
+     */
+    public BufferedImage getEXIFThumbnail() throws ImagingException,
+            IOException {
+
+        if (exif == null) {
+            return null;
         }
+
+        final List<? extends ImageMetadataItem> dirs = exif.getDirectories();
+        for (final ImageMetadataItem d : dirs) {
+            final TiffImageMetadata.Directory dir = (TiffImageMetadata.Directory) d;
+            // Debug.debug("dir", dir);
+            BufferedImage image = dir.getThumbnail();
+            if (null != image) {
+                return image;
+            }
+
+            final JpegImageData jpegImageData = dir.getJpegImageData();
+            if (jpegImageData != null) {
+                // JPEG thumbnail as JPEG or other format; try to parse.
+                boolean imageSucceeded = false;
+                try {
+                    image = Imaging.getBufferedImage(jpegImageData.getData());
+                    imageSucceeded = true;
+                } catch (final IOException ignored) { // NOPMD
+                } finally {
+                    // our JPEG reading is still a bit buggy -
+                    // fall back to ImageIO on error
+                    if (!imageSucceeded) {
+                        final ByteArrayInputStream input = new ByteArrayInputStream(
+                                jpegImageData.getData());
+                        image = ImageIO.read(input);
+                    }
+                }
+                if (image != null) {
+                    return image;
+                }
+            }
+        }
+
         return null;
     }
 
@@ -116,53 +148,39 @@ public class JpegImageMetadata implements ImageMetadata {
     }
 
     /**
-     * Get the thumbnail image if available.
+     * Returns the size of the first JPEG thumbnail found in the EXIF metadata.
      *
-     * @return the thumbnail image. May be {@code null} if no image could
-     *         be found.
-     * @throws ImageReadException if it fails to read the image
-     * @throws IOException if it fails to get the thumbnail or to read the image data
+     * @return Thumbnail width and height or null if no thumbnail.
+     * @throws ImagingException if it fails to read the image
+     * @throws IOException if it fails to read the image size
      */
-    public BufferedImage getEXIFThumbnail() throws ImageReadException,
+    public Dimension getEXIFThumbnailSize() throws ImagingException,
             IOException {
+        final byte[] data = getEXIFThumbnailData();
 
-        if (exif == null) {
-            return null;
+        if (data != null) {
+            return Imaging.getImageSize(data);
         }
-
-        final List<? extends ImageMetadataItem> dirs = exif.getDirectories();
-        for (final ImageMetadataItem d : dirs) {
-            final TiffImageMetadata.Directory dir = (TiffImageMetadata.Directory) d;
-            // Debug.debug("dir", dir);
-            BufferedImage image = dir.getThumbnail();
-            if (null != image) {
-                return image;
-            }
-
-            final JpegImageData jpegImageData = dir.getJpegImageData();
-            if (jpegImageData != null) {
-                // JPEG thumbnail as JPEG or other format; try to parse.
-                boolean imageSucceeded = false;
-                try {
-                    image = Imaging.getBufferedImage(jpegImageData.getData());
-                    imageSucceeded = true;
-                } catch (final ImagingException | IOException ioException) { // NOPMD
-                } finally {
-                    // our JPEG reading is still a bit buggy -
-                    // fall back to ImageIO on error
-                    if (!imageSucceeded) {
-                        final ByteArrayInputStream input = new ByteArrayInputStream(
-                                jpegImageData.getData());
-                        image = ImageIO.read(input);
-                    }
-                }
-                if (image != null) {
-                    return image;
-                }
-            }
-        }
-
         return null;
+    }
+
+    @Override
+    public List<ImageMetadataItem> getItems() {
+        final List<ImageMetadataItem> result = new ArrayList<>();
+
+        if (null != exif) {
+            result.addAll(exif.getItems());
+        }
+
+        if (null != photoshop) {
+            result.addAll(photoshop.getItems());
+        }
+
+        return result;
+    }
+
+    public JpegPhotoshopMetadata getPhotoshop() {
+        return photoshop;
     }
 
     public TiffImageData getRawImageData() {
@@ -180,21 +198,6 @@ public class JpegImageMetadata implements ImageMetadata {
         }
 
         return null;
-    }
-
-    @Override
-    public List<ImageMetadataItem> getItems() {
-        final List<ImageMetadataItem> result = new ArrayList<>();
-
-        if (null != exif) {
-            result.addAll(exif.getItems());
-        }
-
-        if (null != photoshop) {
-            result.addAll(photoshop.getItems());
-        }
-
-        return result;
     }
 
     @Override
@@ -232,10 +235,6 @@ public class JpegImageMetadata implements ImageMetadata {
         }
 
         return result.toString();
-    }
-
-    public void dump() {
-        Debug.debug(this.toString());
     }
 
 }

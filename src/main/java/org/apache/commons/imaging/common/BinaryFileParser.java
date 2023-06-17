@@ -27,12 +27,10 @@ public class BinaryFileParser {
 
     private static final Logger LOGGER = Logger.getLogger(BinaryFileParser.class.getName());
 
-    // default byte order for Java, many file formats.
+    /**
+     * The default {@link ByteOrder} for parsers is {@link ByteOrder#BIG_ENDIAN}.
+     */
     private ByteOrder byteOrder = ByteOrder.BIG_ENDIAN;
-
-    public BinaryFileParser(final ByteOrder byteOrder) {
-        this.byteOrder = byteOrder;
-    }
 
     /**
      * Constructs a BinaryFileParser with the default, big-endian, byte order.
@@ -41,23 +39,8 @@ public class BinaryFileParser {
         // as above
     }
 
-    protected void setByteOrder(final ByteOrder byteOrder) {
+    public BinaryFileParser(final ByteOrder byteOrder) {
         this.byteOrder = byteOrder;
-    }
-
-    public ByteOrder getByteOrder() {
-        return byteOrder;
-    }
-
-    protected final void debugNumber(final String msg, final int data, final int bytes) {
-        try (StringWriter sw = new StringWriter(); PrintWriter pw = new PrintWriter(sw)) {
-            debugNumber(pw, msg, data, bytes);
-            pw.flush();
-            sw.flush();
-            LOGGER.fine(sw.toString());
-        } catch (final IOException e) {
-            LOGGER.log(Level.SEVERE, e.getMessage(), e);
-        }
     }
 
     protected final void debugNumber(final PrintWriter pw, final String msg, final int data, final int bytes) {
@@ -73,5 +56,24 @@ public class BinaryFileParser {
         }
         pw.println(") [0x" + Integer.toHexString(data) + ", " + Integer.toBinaryString(data) + "]");
         pw.flush();
+    }
+
+    protected final void debugNumber(final String msg, final int data, final int bytes) {
+        try (StringWriter sw = new StringWriter(); PrintWriter pw = new PrintWriter(sw)) {
+            debugNumber(pw, msg, data, bytes);
+            pw.flush();
+            sw.flush();
+            LOGGER.fine(sw.toString());
+        } catch (final IOException e) {
+            LOGGER.log(Level.SEVERE, e.getMessage(), e);
+        }
+    }
+
+    public ByteOrder getByteOrder() {
+        return byteOrder;
+    }
+
+    protected void setByteOrder(final ByteOrder byteOrder) {
+        this.byteOrder = byteOrder;
     }
 }

@@ -21,18 +21,18 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class PcxBaseTest extends ImagingTest {
+
+    private static final ImageFilter IMAGE_FILTER = PcxBaseTest::isPcx;
 
     private static boolean isPcx(final File file) {
         return file.getName().toLowerCase().endsWith(".pcx");
     }
 
-    private static final ImageFilter IMAGE_FILTER = PcxBaseTest::isPcx;
-
-    protected List<File> getPcxImages() throws IOException, ImageReadException {
+    protected List<File> getPcxImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 }

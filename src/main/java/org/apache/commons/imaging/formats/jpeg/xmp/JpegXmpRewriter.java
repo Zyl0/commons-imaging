@@ -25,12 +25,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
-import org.apache.commons.imaging.common.bytesource.ByteSource;
-import org.apache.commons.imaging.common.bytesource.ByteSourceArray;
-import org.apache.commons.imaging.common.bytesource.ByteSourceFile;
-import org.apache.commons.imaging.common.bytesource.ByteSourceInputStream;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.formats.jpeg.JpegConstants;
 
 /**
@@ -39,7 +35,45 @@ import org.apache.commons.imaging.formats.jpeg.JpegConstants;
 public class JpegXmpRewriter extends JpegRewriter {
 
     /**
-     * Reads a Jpeg image, removes all XMP XML (by removing the APP1 segment),
+     * Reads a JPEG image, removes all XMP XML (by removing the APP1 segment),
+     * and writes the result to a stream.
+     * <p>
+     *
+     * @param src
+     *            Byte array containing JPEG image data.
+     * @param os
+     *            OutputStream to write the image to.
+     * @throws ImagingException if it fails to read the JFIF segments
+     * @throws IOException if it fails to read or write the data from the segments
+     */
+    public void removeXmpXml(final byte[] src, final OutputStream os)
+            throws ImagingException, IOException {
+        final ByteSource byteSource = ByteSource.array(src);
+        removeXmpXml(byteSource, os);
+    }
+
+    /**
+     * Reads a JPEG image, removes all XMP XML (by removing the APP1 segment),
+     * and writes the result to a stream.
+     * <p>
+     *
+     * @param byteSource
+     *            ByteSource containing JPEG image data.
+     * @param os
+     *            OutputStream to write the image to.
+     * @throws ImagingException if it fails to read the JFIF segments
+     * @throws IOException if it fails to read or write the data from the segments
+     */
+    public void removeXmpXml(final ByteSource byteSource, final OutputStream os)
+            throws ImagingException, IOException {
+        final JFIFPieces jfifPieces = analyzeJFIF(byteSource);
+        List<JFIFPiece> pieces = jfifPieces.pieces;
+        pieces = removeXmpSegments(pieces);
+        writeSegments(os, pieces);
+    }
+
+    /**
+     * Reads a JPEG image, removes all XMP XML (by removing the APP1 segment),
      * and writes the result to a stream.
      * <p>
      *
@@ -50,148 +84,70 @@ public class JpegXmpRewriter extends JpegRewriter {
      *
      * @see java.io.File
      * @see java.io.OutputStream
-     * @throws ImageReadException if it fails to read the JFIF segments
+     * @throws ImagingException if it fails to read the JFIF segments
      * @throws IOException if it fails to read or write the data from the segments
      */
     public void removeXmpXml(final File src, final OutputStream os)
-            throws ImageReadException, IOException {
-        final ByteSource byteSource = new ByteSourceFile(src);
+            throws ImagingException, IOException {
+        final ByteSource byteSource = ByteSource.file(src);
         removeXmpXml(byteSource, os);
     }
 
     /**
-     * Reads a Jpeg image, removes all XMP XML (by removing the APP1 segment),
+     * Reads a JPEG image, removes all XMP XML (by removing the APP1 segment),
      * and writes the result to a stream.
      * <p>
      *
      * @param src
-     *            Byte array containing Jpeg image data.
+     *            InputStream containing JPEG image data.
      * @param os
      *            OutputStream to write the image to.
-     * @throws ImageReadException if it fails to read the JFIF segments
-     * @throws IOException if it fails to read or write the data from the segments
-     */
-    public void removeXmpXml(final byte[] src, final OutputStream os)
-            throws ImageReadException, IOException {
-        final ByteSource byteSource = new ByteSourceArray(src);
-        removeXmpXml(byteSource, os);
-    }
-
-    /**
-     * Reads a Jpeg image, removes all XMP XML (by removing the APP1 segment),
-     * and writes the result to a stream.
-     * <p>
-     *
-     * @param src
-     *            InputStream containing Jpeg image data.
-     * @param os
-     *            OutputStream to write the image to.
-     * @throws ImageReadException if it fails to read the JFIF segments
+     * @throws ImagingException if it fails to read the JFIF segments
      * @throws IOException if it fails to read or write the data from the segments
      */
     public void removeXmpXml(final InputStream src, final OutputStream os)
-            throws ImageReadException, IOException {
-        final ByteSource byteSource = new ByteSourceInputStream(src, null);
+            throws ImagingException, IOException {
+        final ByteSource byteSource = ByteSource.inputStream(src, null);
         removeXmpXml(byteSource, os);
     }
 
     /**
-     * Reads a Jpeg image, removes all XMP XML (by removing the APP1 segment),
-     * and writes the result to a stream.
-     * <p>
-     *
-     * @param byteSource
-     *            ByteSource containing Jpeg image data.
-     * @param os
-     *            OutputStream to write the image to.
-     * @throws ImageReadException if it fails to read the JFIF segments
-     * @throws IOException if it fails to read or write the data from the segments
-     */
-    public void removeXmpXml(final ByteSource byteSource, final OutputStream os)
-            throws ImageReadException, IOException {
-        final JFIFPieces jfifPieces = analyzeJFIF(byteSource);
-        List<JFIFPiece> pieces = jfifPieces.pieces;
-        pieces = removeXmpSegments(pieces);
-        writeSegments(os, pieces);
-    }
-
-    /**
-     * Reads a Jpeg image, replaces the XMP XML and writes the result to a
+     * Reads a JPEG image, replaces the XMP XML and writes the result to a
      * stream.
      *
      * @param src
-     *            Byte array containing Jpeg image data.
+     *            Byte array containing JPEG image data.
      * @param os
      *            OutputStream to write the image to.
      * @param xmpXml
      *            String containing XMP XML.
-     * @throws ImageReadException if it fails to read the JFIF segments
+     * @throws ImagingException if it fails to read the JFIF segments
      * @throws IOException if it fails to read or write the data from the segments
-     * @throws ImageWriteException if it fails to write the JFIF segments
+     * @throws ImagingException if it fails to write the JFIF segments
      */
     public void updateXmpXml(final byte[] src, final OutputStream os, final String xmpXml)
-            throws ImageReadException, IOException, ImageWriteException {
-        final ByteSource byteSource = new ByteSourceArray(src);
+            throws ImagingException, IOException, ImagingException {
+        final ByteSource byteSource = ByteSource.array(src);
         updateXmpXml(byteSource, os, xmpXml);
     }
 
     /**
-     * Reads a Jpeg image, replaces the XMP XML and writes the result to a
-     * stream.
-     *
-     * @param src
-     *            InputStream containing Jpeg image data.
-     * @param os
-     *            OutputStream to write the image to.
-     * @param xmpXml
-     *            String containing XMP XML.
-     * @throws ImageReadException if it fails to read the JFIF segments
-     * @throws IOException if it fails to read or write the data from the segments
-     * @throws ImageWriteException if it fails to write the JFIF segments
-     */
-    public void updateXmpXml(final InputStream src, final OutputStream os, final String xmpXml)
-            throws ImageReadException, IOException, ImageWriteException {
-        final ByteSource byteSource = new ByteSourceInputStream(src, null);
-        updateXmpXml(byteSource, os, xmpXml);
-    }
-
-    /**
-     * Reads a Jpeg image, replaces the XMP XML and writes the result to a
-     * stream.
-     *
-     * @param src
-     *            Image file.
-     * @param os
-     *            OutputStream to write the image to.
-     * @param xmpXml
-     *            String containing XMP XML.
-     * @throws ImageReadException if it fails to read the JFIF segments
-     * @throws IOException if it fails to read or write the data from the segments
-     * @throws ImageWriteException if it fails to write the JFIF segments
-     */
-    public void updateXmpXml(final File src, final OutputStream os, final String xmpXml)
-            throws ImageReadException, IOException, ImageWriteException {
-        final ByteSource byteSource = new ByteSourceFile(src);
-        updateXmpXml(byteSource, os, xmpXml);
-    }
-
-    /**
-     * Reads a Jpeg image, replaces the XMP XML and writes the result to a
+     * Reads a JPEG image, replaces the XMP XML and writes the result to a
      * stream.
      *
      * @param byteSource
-     *            ByteSource containing Jpeg image data.
+     *            ByteSource containing JPEG image data.
      * @param os
      *            OutputStream to write the image to.
      * @param xmpXml
      *            String containing XMP XML.
-     * @throws ImageReadException if it fails to read the JFIF segments
+     * @throws ImagingException if it fails to read the JFIF segments
      * @throws IOException if it fails to read or write the data from the segments
-     * @throws ImageWriteException if it fails to write the JFIF segments
+     * @throws ImagingException if it fails to write the JFIF segments
      */
     public void updateXmpXml(final ByteSource byteSource, final OutputStream os,
-            final String xmpXml) throws ImageReadException, IOException,
-            ImageWriteException {
+            final String xmpXml) throws ImagingException, IOException,
+            ImagingException {
         final JFIFPieces jfifPieces = analyzeJFIF(byteSource);
         List<JFIFPiece> pieces = jfifPieces.pieces;
         pieces = removeXmpSegments(pieces);
@@ -210,6 +166,46 @@ public class JpegXmpRewriter extends JpegRewriter {
         pieces = insertAfterLastAppSegments(pieces, newPieces);
 
         writeSegments(os, pieces);
+    }
+
+    /**
+     * Reads a JPEG image, replaces the XMP XML and writes the result to a
+     * stream.
+     *
+     * @param src
+     *            Image file.
+     * @param os
+     *            OutputStream to write the image to.
+     * @param xmpXml
+     *            String containing XMP XML.
+     * @throws ImagingException if it fails to read the JFIF segments
+     * @throws IOException if it fails to read or write the data from the segments
+     * @throws ImagingException if it fails to write the JFIF segments
+     */
+    public void updateXmpXml(final File src, final OutputStream os, final String xmpXml)
+            throws ImagingException, IOException, ImagingException {
+        final ByteSource byteSource = ByteSource.file(src);
+        updateXmpXml(byteSource, os, xmpXml);
+    }
+
+    /**
+     * Reads a JPEG image, replaces the XMP XML and writes the result to a
+     * stream.
+     *
+     * @param src
+     *            InputStream containing JPEG image data.
+     * @param os
+     *            OutputStream to write the image to.
+     * @param xmpXml
+     *            String containing XMP XML.
+     * @throws ImagingException if it fails to read the JFIF segments
+     * @throws IOException if it fails to read or write the data from the segments
+     * @throws ImagingException if it fails to write the JFIF segments
+     */
+    public void updateXmpXml(final InputStream src, final OutputStream os, final String xmpXml)
+            throws ImagingException, IOException, ImagingException {
+        final ByteSource byteSource = ByteSource.inputStream(src, null);
+        updateXmpXml(byteSource, os, xmpXml);
     }
 
     private byte[] writeXmpSegment(final byte[] xmpXmlData, final int start, final int length)

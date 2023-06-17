@@ -18,18 +18,18 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class XbmBaseTest extends ImagingTest {
+
+    private static final ImageFilter IMAGE_FILTER = XbmBaseTest::isXbm;
 
     private static boolean isXbm(final File file) {
         return file.getName().toLowerCase().endsWith(".xbm");
     }
 
-    private static final ImageFilter IMAGE_FILTER = XbmBaseTest::isXbm;
-
-    protected List<File> getXbmImages() throws IOException, ImageReadException {
+    protected List<File> getXbmImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 }

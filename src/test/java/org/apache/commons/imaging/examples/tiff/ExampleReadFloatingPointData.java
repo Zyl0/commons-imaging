@@ -26,9 +26,9 @@ import java.util.List;
 import javax.imageio.ImageIO;
 
 import org.apache.commons.imaging.FormatCompliance;
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.common.ImageBuilder;
-import org.apache.commons.imaging.common.bytesource.ByteSourceFile;
 import org.apache.commons.imaging.formats.tiff.TiffContents;
 import org.apache.commons.imaging.formats.tiff.TiffDirectory;
 import org.apache.commons.imaging.formats.tiff.TiffImagingParameters;
@@ -61,11 +61,11 @@ public class ExampleReadFloatingPointData {
      *
      * @param args the command line arguments giving the path to an input TIFF
      * file
-     * @throws org.apache.commons.imaging.ImageReadException in the event of an
+     * @throws org.apache.commons.imaging.ImagingException in the event of an
      * internal data format or version compatibility error reading the image.
      * @throws IOException in the event of an I/O error.
      */
-    public static void main(final String[] args) throws ImageReadException, IOException {
+    public static void main(final String[] args) throws ImagingException, IOException {
         if (args.length == 0) {
             // Print usage and exit
             for (final String s : USAGE) {
@@ -82,7 +82,7 @@ public class ExampleReadFloatingPointData {
         final boolean optionalImageWritingEnabled
             = outputPath != null && !outputPath.isEmpty();
 
-        final ByteSourceFile byteSource = new ByteSourceFile(target);
+        final ByteSource byteSource = ByteSource.file(target);
 
         // Establish a TiffReader. This is just a simple constructor that
         // does not actually access the file until one of its methods such as

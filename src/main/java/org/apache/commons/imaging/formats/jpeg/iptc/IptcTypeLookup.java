@@ -19,20 +19,21 @@ package org.apache.commons.imaging.formats.jpeg.iptc;
 import java.util.HashMap;
 import java.util.Map;
 
-public final class IptcTypeLookup {
+final class IptcTypeLookup {
 
     private static final Map<Integer, IptcType> IPTC_TYPE_MAP = new HashMap<>();
+
     static {
         for (final IptcType iptcType : IptcTypes.values()) {
             IPTC_TYPE_MAP.put(iptcType.getType(), iptcType);
         }
     }
 
-    private IptcTypeLookup() {
-    }
-
     public static IptcType getIptcType(final int type) {
         final IptcType iptcType = IPTC_TYPE_MAP.get(type);
         return iptcType != null ? iptcType : IptcTypes.getUnknown(type);
+    }
+
+    private IptcTypeLookup() {
     }
 }

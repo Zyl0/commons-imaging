@@ -16,16 +16,15 @@
  */
 package org.apache.commons.imaging.common;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.RandomAccessFile;
 import java.nio.ByteOrder;
 import java.util.logging.Logger;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.io.IOUtils;
 
 /**
  * Convenience methods for various binary and I/O operations.
@@ -34,142 +33,8 @@ public final class BinaryFunctions {
 
     private static final Logger LOGGER = Logger.getLogger(BinaryFunctions.class.getName());
 
-    private BinaryFunctions() {
-    }
-
-    public static boolean startsWith(final byte[] haystack, final byte[] needle) {
-        if (needle == null) {
-            return false;
-        }
-        if (haystack == null) {
-            return false;
-        }
-        if (needle.length > haystack.length) {
-            return false;
-        }
-
-        for (int i = 0; i < needle.length; i++) {
-            if (needle[i] != haystack[i]) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public static boolean startsWith(final byte[] haystack, final BinaryConstant needle) {
-        if ((haystack == null) || (haystack.length < needle.size())) {
-            return false;
-        }
-
-        for (int i = 0; i < needle.size(); i++) {
-            if (haystack[i] != needle.get(i)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    public static byte readByte(final String name, final InputStream is, final String exception)
-            throws IOException {
-        final int result = is.read();
-        if ((result < 0)) {
-            throw new IOException(exception);
-        }
-        return (byte) (0xff & result);
-    }
-
-    public static byte[] readBytes(final String name, final InputStream is, final int length)
-            throws IOException {
-        final String exception = name + " could not be read.";
-        return readBytes(name, is, length, exception);
-    }
-
-    public static byte[] readBytes(final String name, final InputStream is, final int length,
-            final String exception) throws IOException {
-        if (length < 0) {
-            throw new IOException(String.format("%s, invalid length: %d", exception, length));
-        }
-        final byte[] result = new byte[length];
-        int read = 0;
-        while (read < length) {
-            final int count = is.read(result, read, length - read);
-            if (count < 0) {
-                throw new IOException(exception + " count: " + count
-                        + " read: " + read + " length: " + length);
-            }
-
-            read += count;
-        }
-
-        return result;
-    }
-
-    public static byte[] readBytes(final InputStream is, final int count) throws IOException {
-        return readBytes("", is, count, "Unexpected EOF");
-    }
-
-    public static void readAndVerifyBytes(final InputStream is, final byte[] expected,
-            final String exception) throws ImageReadException, IOException {
-        for (final byte element : expected) {
-            final int data = is.read();
-            final byte b = (byte) (0xff & data);
-
-            if (data < 0) {
-                throw new ImageReadException("Unexpected EOF.");
-            }
-
-            if (b != element) {
-                throw new ImageReadException(exception);
-            }
-        }
-    }
-
-    public static void readAndVerifyBytes(final InputStream is,
-            final BinaryConstant expected, final String exception)
-            throws ImageReadException, IOException {
-        for (int i = 0; i < expected.size(); i++) {
-            final int data = is.read();
-            final byte b = (byte) (0xff & data);
-
-            if (data < 0) {
-                throw new ImageReadException("Unexpected EOF.");
-            }
-
-            if (b != expected.get(i)) {
-                throw new ImageReadException(exception);
-            }
-        }
-    }
-
-    public static void skipBytes(final InputStream is, final long length, final String exception)
-            throws IOException {
-        long total = 0;
-        while (length != total) {
-            final long skipped = is.skip(length - total);
-            if (skipped < 1) {
-                throw new IOException(exception + " (" + skipped + ")");
-            }
-            total += skipped;
-        }
-    }
-
-    public static byte[] remainingBytes(final String name, final byte[] bytes, final int count) {
-        return slice(bytes, count, bytes.length - count);
-    }
-
-    public static byte[] slice(final byte[] bytes, final int start, final int count) {
-        final byte[] result = new byte[count];
-        System.arraycopy(bytes, start, result, 0, count);
-        return result;
-    }
-
-    public static byte[] head(final byte[] bytes, int count) {
-        if (count > bytes.length) {
-            count = bytes.length;
-        }
-        return slice(bytes, 0, count);
+    public static int charsToQuad(final char c1, final char c2, final char c3, final char c4) {
+        return (((0xff & c1) << 24) | ((0xff & c2) << 16) | ((0xff & c3) << 8) | ((0xff & c4) << 0));
     }
 
     public static boolean compareBytes(final byte[] a, final int aStart, final byte[] b,
@@ -188,6 +53,118 @@ public final class BinaryFunctions {
         }
 
         return true;
+    }
+
+    public static int findNull(final byte[] src, final int start, final String message) throws ImagingException {
+        for (int i = start; i < src.length; i++) {
+            if (src[i] == 0) {
+                return i;
+            }
+        }
+        throw new ImagingException(message);
+    }
+
+    public static int findNull(final byte[] src, final String message) throws ImagingException {
+        return findNull(src, 0, message);
+    }
+
+    public static byte[] getRAFBytes(final RandomAccessFile raf, final long pos,
+            final int length, final String exception) throws IOException {
+        if (length < 0) {
+            throw new IOException(String.format("%s, invalid length: %d", exception, length));
+        }
+        final byte[] result = Allocator.byteArray(length);
+
+        raf.seek(pos);
+
+        int read = 0;
+        while (read < length) {
+            final int count = raf.read(result, read, length - read);
+            if (count < 0) {
+                throw new IOException(exception);
+            }
+
+            read += count;
+        }
+
+        return result;
+
+    }
+
+    public static byte[] head(final byte[] bytes, int count) {
+        if (count > bytes.length) {
+            count = bytes.length;
+        }
+        return slice(bytes, 0, count);
+    }
+
+    public static void logByteBits(final String msg, final byte i) {
+        LOGGER.finest(msg + ": '" + Integer.toBinaryString(0xff & i));
+    }
+
+    public static void logCharQuad(final String msg, final int i) {
+        LOGGER.finest(msg + ": '" + (char) (0xff & (i >> 24))
+                + (char) (0xff & (i >> 16)) + (char) (0xff & (i >> 8))
+                + (char) (0xff & (i >> 0)) + "'");
+
+    }
+
+    public static void printCharQuad(final PrintWriter pw, final String msg, final int i) {
+        pw.println(msg + ": '" + (char) (0xff & (i >> 24))
+                + (char) (0xff & (i >> 16)) + (char) (0xff & (i >> 8))
+                + (char) (0xff & (i >> 0)) + "'");
+
+    }
+
+    /**
+     * Convert a quad into a byte array.
+     * @param quad quad
+     * @return a byte array
+     */
+    public static byte[] quadsToByteArray(final int quad) {
+        final byte[] arr = new byte[4];
+        arr[0] = (byte) (quad >> 24);
+        arr[1] = (byte) (quad >> 16);
+        arr[2] = (byte) (quad >> 8);
+        arr[3] = (byte) quad;
+        return arr;
+    }
+
+    public static int read2Bytes(final String name, final InputStream is,
+            final String exception, final ByteOrder byteOrder) throws IOException {
+        final int byte0 = is.read();
+        final int byte1 = is.read();
+        if ((byte0 | byte1) < 0) {
+            throw new IOException(exception);
+        }
+
+        final int result;
+        if (byteOrder == ByteOrder.BIG_ENDIAN) {
+            result = (byte0 << 8) | byte1;
+        } else {
+            result = (byte1 << 8) | byte0;
+        }
+
+        return result;
+    }
+
+    public static int read3Bytes(final String name, final InputStream is,
+            final String exception, final ByteOrder byteOrder) throws IOException {
+        final int byte0 = is.read();
+        final int byte1 = is.read();
+        final int byte2 = is.read();
+        if ((byte0 | byte1 | byte2) < 0) {
+            throw new IOException(exception);
+        }
+
+        final int result;
+        if (byteOrder == ByteOrder.BIG_ENDIAN) {
+            result = (byte0 << 16) | (byte1 << 8) | (byte2 << 0);
+        } else {
+            result = (byte2 << 16) | (byte1 << 8) | (byte0 << 0);
+        }
+
+        return result;
     }
 
     public static int read4Bytes(final String name, final InputStream is,
@@ -212,79 +189,68 @@ public final class BinaryFunctions {
         return result;
     }
 
-    public static int read3Bytes(final String name, final InputStream is,
-            final String exception, final ByteOrder byteOrder) throws IOException {
-        final int byte0 = is.read();
-        final int byte1 = is.read();
-        final int byte2 = is.read();
-        if ((byte0 | byte1 | byte2) < 0) {
-            throw new IOException(exception);
+    public static void readAndVerifyBytes(final InputStream is,
+            final BinaryConstant expected, final String exception)
+            throws ImagingException, IOException {
+        for (int i = 0; i < expected.size(); i++) {
+            final int data = is.read();
+            final byte b = (byte) (0xff & data);
+
+            if (data < 0) {
+                throw new ImagingException("Unexpected EOF.");
+            }
+
+            if (b != expected.get(i)) {
+                throw new ImagingException(exception);
+            }
         }
+    }
 
-        final int result;
-        if (byteOrder == ByteOrder.BIG_ENDIAN) {
-            result = (byte0 << 16) | (byte1 << 8)
-                    | (byte2 << 0);
-        } else {
-            result = (byte2 << 16) | (byte1 << 8)
-                    | (byte0 << 0);
+    public static void readAndVerifyBytes(final InputStream is, final byte[] expected,
+            final String exception) throws ImagingException, IOException {
+        for (final byte element : expected) {
+            final int data = is.read();
+            final byte b = (byte) (0xff & data);
+
+            if (data < 0) {
+                throw new ImagingException("Unexpected EOF.");
+            }
+
+            if (b != element) {
+                throw new ImagingException(exception);
+            }
         }
-
-        return result;
     }
 
-    public static int read2Bytes(final String name, final InputStream is,
-            final String exception, final ByteOrder byteOrder) throws IOException {
-        final int byte0 = is.read();
-        final int byte1 = is.read();
-        if ((byte0 | byte1) < 0) {
-            throw new IOException(exception);
+    public static byte readByte(final String name, final InputStream is, final String exceptionMessage)
+            throws IOException {
+        final int result = is.read();
+        if (result < 0) {
+            throw new IOException(exceptionMessage);
         }
+        return (byte) (0xff & result);
+    }
 
-        final int result;
-        if (byteOrder == ByteOrder.BIG_ENDIAN) {
-            result = (byte0 << 8) | byte1;
-        } else {
-            result = (byte1 << 8) | byte0;
+    public static byte[] readBytes(final InputStream is, final int count) throws IOException {
+        return readBytes("", is, count, "Unexpected EOF");
+    }
+
+    public static byte[] readBytes(final String name, final InputStream is, final int length)
+            throws IOException {
+        return readBytes(name, is, length, name + " could not be read.");
+    }
+
+    public static byte[] readBytes(final String name, final InputStream is, final int length,
+            final String exception) throws IOException {
+        try {
+            return IOUtils.toByteArray(is, Allocator.check(length));
+        } catch (IOException e) {
+            throw new IOException(exception + " length: " + length);
         }
-
-        return result;
     }
 
-    public static void printCharQuad(final String msg, final int i) {
-        LOGGER.finest(msg + ": '" + (char) (0xff & (i >> 24))
-                + (char) (0xff & (i >> 16)) + (char) (0xff & (i >> 8))
-                + (char) (0xff & (i >> 0)) + "'");
-
-    }
-
-    public static void printCharQuad(final PrintWriter pw, final String msg, final int i) {
-        pw.println(msg + ": '" + (char) (0xff & (i >> 24))
-                + (char) (0xff & (i >> 16)) + (char) (0xff & (i >> 8))
-                + (char) (0xff & (i >> 0)) + "'");
-
-    }
-
-    public static void printByteBits(final String msg, final byte i) {
-        LOGGER.finest(msg + ": '" + Integer.toBinaryString(0xff & i));
-    }
-
-    public static int charsToQuad(final char c1, final char c2, final char c3, final char c4) {
-        return (((0xff & c1) << 24) | ((0xff & c2) << 16) | ((0xff & c3) << 8) | ((0xff & c4) << 0));
-    }
-
-    /**
-     * Convert a quad into a byte array.
-     * @param quad quad
-     * @return a byte array
-     */
-    public static byte[] quadsToByteArray(final int quad) {
-        final byte[] arr = new byte[4];
-        arr[0] = (byte) (quad >> 24);
-        arr[1] = (byte) (quad >> 16);
-        arr[2] = (byte) (quad >> 8);
-        arr[3] = (byte) quad;
-        return arr;
+    public static byte[] remainingBytes(final String name, final byte[] bytes, final int count) {
+        return slice(bytes, count, bytes.length - count);
     }
 
     /**
@@ -315,58 +281,58 @@ public final class BinaryFunctions {
         return false;
     }
 
-    public static int findNull(final byte[] src) {
-        return findNull(src, 0);
-    }
-
-    public static int findNull(final byte[] src, final int start) {
-        for (int i = start; i < src.length; i++) {
-            if (src[i] == 0) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    public static byte[] getRAFBytes(final RandomAccessFile raf, final long pos,
-            final int length, final String exception) throws IOException {
-        if (length < 0) {
-            throw new IOException(String.format("%s, invalid length: %d", exception, length));
-        }
-        final byte[] result = new byte[length];
-
-        raf.seek(pos);
-
-        int read = 0;
-        while (read < length) {
-            final int count = raf.read(result, read, length - read);
-            if (count < 0) {
-                throw new IOException(exception);
-            }
-
-            read += count;
-        }
-
-        return result;
-
-    }
-
     public static void skipBytes(final InputStream is, final long length) throws IOException {
         skipBytes(is, length, "Couldn't skip bytes");
     }
 
-    public static void copyStreamToStream(final InputStream is, final OutputStream os)
-            throws IOException {
-        final byte[] buffer = new byte[1024];
-        int read;
-        while ((read = is.read(buffer)) > 0) {
-            os.write(buffer, 0, read);
+    public static void skipBytes(final InputStream is, final long length, final String exception) throws IOException {
+        try {
+            IOUtils.skip(is, length);
+        } catch (IOException e) {
+            throw new IOException(exception, e);
         }
     }
 
-    public static byte[] getStreamBytes(final InputStream is) throws IOException {
-        final ByteArrayOutputStream os = new ByteArrayOutputStream();
-        copyStreamToStream(is, os);
-        return os.toByteArray();
+    public static byte[] slice(final byte[] bytes, final int start, final int count) {
+        final byte[] result = Allocator.byteArray(count);
+        System.arraycopy(bytes, start, result, 0, count);
+        return result;
+    }
+
+    public static boolean startsWith(final byte[] buffer, final BinaryConstant search) {
+        if (buffer == null || buffer.length < search.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < search.size(); i++) {
+            if (buffer[i] != search.get(i)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public static boolean startsWith(final byte[] buffer, final byte[] search) {
+        if (search == null) {
+            return false;
+        }
+        if (buffer == null) {
+            return false;
+        }
+        if (search.length > buffer.length) {
+            return false;
+        }
+
+        for (int i = 0; i < search.length; i++) {
+            if (search[i] != buffer[i]) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private BinaryFunctions() {
     }
 }

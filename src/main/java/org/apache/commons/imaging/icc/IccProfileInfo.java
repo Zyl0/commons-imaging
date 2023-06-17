@@ -21,7 +21,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.logging.Logger;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 
 public class IccProfileInfo {
 
@@ -71,6 +71,10 @@ public class IccProfileInfo {
         this.tags = tags;
     }
 
+    public void dump(final String prefix) {
+        LOGGER.fine(toString());
+    }
+
     public byte[] getData() {
         return data.clone();
     }
@@ -94,10 +98,6 @@ public class IccProfileInfo {
                 + (char) (0xff & (i >> 0)) + "'");
     }
 
-    public void dump(final String prefix) {
-        LOGGER.fine(toString());
-    }
-
     @Override
     public String toString() {
         try {
@@ -107,7 +107,7 @@ public class IccProfileInfo {
         }
     }
 
-    public String toString(final String prefix) throws ImageReadException,
+    public String toString(final String prefix) throws ImagingException,
             IOException {
         final StringWriter sw = new StringWriter();
         final PrintWriter pw = new PrintWriter(sw);

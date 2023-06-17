@@ -19,8 +19,8 @@ package org.apache.commons.imaging.formats.tiff.datareaders;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_CCITT_1D;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_CCITT_GROUP_3;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_CCITT_GROUP_4;
-import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_DEFLATE_PKZIP;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_DEFLATE_ADOBE;
+import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_DEFLATE_PKZIP;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_LZW;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_PACKBITS;
 import static org.apache.commons.imaging.formats.tiff.constants.TiffConstants.TIFF_COMPRESSION_UNCOMPRESSED;
@@ -36,18 +36,19 @@ import java.io.InputStream;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.ImageBuilder;
 import org.apache.commons.imaging.common.PackBits;
-import org.apache.commons.imaging.common.itu_t4.T4AndT6Compression;
-import org.apache.commons.imaging.common.mylzw.MyLzwDecompressor;
 import org.apache.commons.imaging.common.ZlibDeflate;
-import org.apache.commons.imaging.formats.tiff.TiffRasterData;
 import org.apache.commons.imaging.formats.tiff.TiffDirectory;
 import org.apache.commons.imaging.formats.tiff.TiffField;
+import org.apache.commons.imaging.formats.tiff.TiffRasterData;
 import org.apache.commons.imaging.formats.tiff.constants.TiffPlanarConfiguration;
 import org.apache.commons.imaging.formats.tiff.constants.TiffTagConstants;
+import org.apache.commons.imaging.formats.tiff.itu_t4.T4AndT6Compression;
 import org.apache.commons.imaging.formats.tiff.photometricinterpreters.PhotometricInterpreter;
+import org.apache.commons.imaging.mylzw.MyLzwDecompressor;
 
 /**
  * Defines the base class for the TIFF file reader classes. The TIFF format
@@ -199,73 +200,8 @@ public abstract class ImageDataReader {
         this.width = width;
         this.height = height;
         this.planarConfiguration = planarConfiguration;
-        last = new int[samplesPerPixel];
+        last = Allocator.intArray(samplesPerPixel);
 
-    }
-
-    /**
-     * Read the image data from the IFD associated with this instance of
-     * ImageDataReader using the optional sub-image specification if desired.
-     *
-     * @param subImageSpecification a rectangle describing a sub-region of the
-     * image for reading, or a null if the whole image is to be read.
-     * @param hasAlpha indicates that the image has an alpha (transparency)
-     * channel (RGB color model only).
-     * @param isAlphaPremultiplied indicates that the image uses the associated
-     * alpha channel format (pre-multiplied alpha).
-     * @return a valid instance containing the pixel data from the image.
-     * @throws ImageReadException in the event of a data format error or other
-     * TIFF-specific failure.
-     * @throws IOException in the event of an unrecoverable I/O error.
-     */
-    public abstract ImageBuilder readImageData(
-            Rectangle subImageSpecification,
-            boolean hasAlpha,
-            boolean isAlphaPremultiplied)
-            throws ImageReadException, IOException;
-
-    /**
-     * Checks if all the bits per sample entries are the same size
-     *
-     * @param size the size to check
-     * @return true if all the bits per sample entries are the same
-     */
-    protected boolean isHomogenous(final int size) {
-        for (final int element : bitsPerSample) {
-            if (element != size) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Reads samples and returns them in an int array.
-     *
-     * @param bis the stream to read from
-     * @param result the samples array to populate, must be the same length as
-     * bitsPerSample.length
-     * @throws IOException
-     */
-    void getSamplesAsBytes(final BitInputStream bis, final int[] result) throws IOException {
-        for (int i = 0; i < bitsPerSample.length; i++) {
-            final int bits = bitsPerSample[i];
-            int sample = bis.readBits(bits);
-            if (bits < 8) {
-                final int sign = sample & 1;
-                sample = sample << (8 - bits); // scale to byte.
-                if (sign > 0) {
-                    sample = sample | ((1 << (8 - bits)) - 1); // extend to byte
-                }
-            } else if (bits > 8) {
-                sample = sample >> (bits - 8); // extend to byte.
-            }
-            result[i] = sample;
-        }
-    }
-
-    protected void resetPredictor() {
-        Arrays.fill(last, 0);
     }
 
     protected int[] applyPredictor(final int[] samples) {
@@ -293,7 +229,7 @@ public abstract class ImageDataReader {
 
     protected byte[] decompress(final byte[] compressedInput, final int compression,
             final int expectedSize, final int tileWidth, final int tileHeight)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         final TiffField fillOrderField = directory.findField(TiffTagConstants.TIFF_TAG_FILL_ORDER);
         int fillOrder = TiffTagConstants.FILL_ORDER_VALUE_NORMAL;
         if (fillOrderField != null) {
@@ -309,15 +245,16 @@ public abstract class ImageDataReader {
                 compressedOrdered[i] = (byte) (Integer.reverse(0xff & compressedInput[i]) >>> 24);
             }
         } else {
-            throw new ImageReadException("TIFF FillOrder=" + fillOrder
+            throw new ImagingException("TIFF FillOrder=" + fillOrder
                     + " is invalid");
         }
 
         switch (compression) {
-        case TIFF_COMPRESSION_UNCOMPRESSED: // None;
+        case TIFF_COMPRESSION_UNCOMPRESSED:
+            // None;
             return compressedOrdered;
-        case TIFF_COMPRESSION_CCITT_1D: // CCITT Group 3 1-Dimensional Modified
-                                        // Huffman run-length encoding.
+        case TIFF_COMPRESSION_CCITT_1D:
+            // CCITT Group 3 1-Dimensional Modified Huffman run-length encoding.
             return T4AndT6Compression.decompressModifiedHuffman(compressedOrdered,
                     tileWidth, tileHeight);
         case TIFF_COMPRESSION_CCITT_GROUP_3: {
@@ -329,7 +266,7 @@ public abstract class ImageDataReader {
             final boolean is2D = (t4Options & TIFF_FLAG_T4_OPTIONS_2D) != 0;
             final boolean usesUncompressedMode = (t4Options & TIFF_FLAG_T4_OPTIONS_UNCOMPRESSED_MODE) != 0;
             if (usesUncompressedMode) {
-                throw new ImageReadException(
+                throw new ImagingException(
                         "T.4 compression with the uncompressed mode extension is not yet supported");
             }
             final boolean hasFillBitsBeforeEOL = (t4Options & TIFF_FLAG_T4_OPTIONS_FILL) != 0;
@@ -348,7 +285,7 @@ public abstract class ImageDataReader {
             }
             final boolean usesUncompressedMode = (t6Options & TIFF_FLAG_T6_OPTIONS_UNCOMPRESSED_MODE) != 0;
             if (usesUncompressedMode) {
-                throw new ImageReadException(
+                throw new ImagingException(
                         "T.6 compression with the uncompressed mode extension is not yet supported");
             }
             return T4AndT6Compression.decompressT6(compressedOrdered, tileWidth,
@@ -356,15 +293,8 @@ public abstract class ImageDataReader {
         }
         case TIFF_COMPRESSION_LZW: {
             final InputStream is = new ByteArrayInputStream(compressedOrdered);
-
             final int lzwMinimumCodeSize = 8;
-
-            final MyLzwDecompressor myLzwDecompressor = new MyLzwDecompressor(
-                    lzwMinimumCodeSize, ByteOrder.BIG_ENDIAN);
-
-            myLzwDecompressor.setTiffLZWMode();
-
-            return myLzwDecompressor.decompress(is, expectedSize);
+            return new MyLzwDecompressor(lzwMinimumCodeSize, ByteOrder.BIG_ENDIAN, true).decompress(is, expectedSize);
         }
 
         // Packbits
@@ -379,303 +309,87 @@ public abstract class ImageDataReader {
         }
 
         default:
-            throw new ImageReadException("Tiff: unknown/unsupported compression: " + compression);
+            throw new ImagingException("Tiff: unknown/unsupported compression: " + compression);
         }
     }
 
     /**
-     * Given a source file that specifies the floating-point data format, unpack
-     * the raw bytes obtained from the source file and organize them into an
-     * array of integers containing the bit-equivalent of IEEE-754 32-bit
-     * floats. Source files containing 64 bit doubles are downcast to floats.
-     * <p>
-     * This method supports either the tile format or the strip format of TIFF
-     * source files. The scan size indicates the number of columns to be
-     * extracted. For strips, the width and the scan size are always the full
-     * width of the image. For tiles, the scan size is the full width of the
-     * tile, but the width may be smaller in the cases where the tiles do not
-     * evenly divide the width (for example, a 256 pixel wide tile in a 257
-     * pixel wide image would result in two columns of tiles, the second column
-     * having only one column of pixels that were worth extracting.
+     * Reads samples and returns them in an int array.
      *
-     * @param width the width of the data block to be extracted
-     * @param height the height of the data block to be extracted
-     * @param scanSize the number of pixels in a single row of the block
-     * @param bytes the raw bytes
-     * @param bitsPerPixel the number of bits per sample, 32 or 64.
-     * @param byteOrder the byte order for the source data
-     * @return a valid array of integers in row major order, dimensions
-     * scan-size wide and height.
-     * @throws ImageReadException in the event of an invalid format.
+     * @param bis the stream to read from
+     * @param result the samples array to populate, must be the same length as
+     * bitsPerSample.length
+     * @throws IOException
      */
-    protected int[] unpackFloatingPointSamples(
-        final int width,
-        final int height,
-        final int scanSize,
-        final byte[] bytes,
-        final int bitsPerPixel,
-        final ByteOrder byteOrder)
-        throws ImageReadException {
-        final int bitsPerSample = bitsPerPixel / samplesPerPixel;
-        final int bytesPerSample = bitsPerSample / 8;
-        final int bytesPerScan = scanSize * samplesPerPixel * bytesPerSample;
-        final int nBytes = bytesPerScan * height;
-        final int length = bytes.length < nBytes ? nBytes / bytesPerScan : height;
-        final int[] samples = new int[scanSize * samplesPerPixel * height];
-        // floating-point differencing is indicated by a predictor value of 3.
-        if (predictor == TiffTagConstants.PREDICTOR_VALUE_FLOATING_POINT_DIFFERENCING) {
-            // at this time, this class supports the 32-bit format.  The
-            // main reason for this is that we have not located sample data
-            // that can be used for testing and analysis.
-            if (bitsPerPixel / samplesPerPixel != 32) {
-                throw new ImageReadException(
-                    "Imaging does not yet support floating-point data"
-                    + " with predictor type 3 for "
-                    + bitsPerPixel + " bits per sample");
-            }
-
-            if (planarConfiguration == TiffPlanarConfiguration.CHUNKY) {
-                final int bytesInRow = scanSize * 4 * samplesPerPixel;
-                for (int i = 0; i < length; i++) {
-                    final int aOffset = i * bytesInRow;
-                    final int bOffset = aOffset + scanSize * samplesPerPixel;
-                    final int cOffset = bOffset + scanSize * samplesPerPixel;
-                    final int dOffset = cOffset + scanSize * samplesPerPixel;
-                    // in this loop, the source bytes give delta values.
-                    // we adjust them to give true values.  This operation is
-                    // done on a row-by-row basis.
-                    for (int j = 1; j < bytesInRow; j++) {
-                        bytes[aOffset + j] += bytes[aOffset + j - 1];
-                    }
-                    // pack the bytes into the integer bit-equivalent of
-                    // floating point values
-                    int index = i * scanSize;
-                    for (int j = 0; j < width * samplesPerPixel; j++) {
-                        final int a = bytes[aOffset + j];
-                        final int b = bytes[bOffset + j];
-                        final int c = bytes[cOffset + j];
-                        final int d = bytes[dOffset + j];
-                        // Pack the 4 byte components into a single integer
-                        // in the byte order used by the TIFF standard
-                        samples[index++] = ((a & 0xff) << 24)
-                            | ((b & 0xff) << 16)
-                            | ((c & 0xff) << 8)
-                            | (d & 0xff);
-                    }
+    void getSamplesAsBytes(final BitInputStream bis, final int[] result) throws IOException {
+        for (int i = 0; i < bitsPerSample.length; i++) {
+            final int bits = bitsPerSample[i];
+            int sample = bis.readBits(bits);
+            if (bits < 8) {
+                final int sign = sample & 1;
+                sample = sample << (8 - bits); // scale to byte.
+                if (sign > 0) {
+                    sample = sample | ((1 << (8 - bits)) - 1); // extend to byte
                 }
-            } else {
-                final int bytesInRow = scanSize * 4;
-                for (int iPlane = 0; iPlane < samplesPerPixel; iPlane++) {
-                    final int planarIntOffset = iPlane * length * scanSize;
-                    final int planarByteOffset = planarIntOffset * 4;
-
-                    for (int i = 0; i < length; i++) {
-                        final int aOffset = i * bytesInRow + planarByteOffset;
-                        final int bOffset = aOffset + scanSize;
-                        final int cOffset = bOffset + scanSize;
-                        final int dOffset = cOffset + scanSize;
-                        // in this loop, the source bytes give delta values.
-                        // we adjust them to give true values.  This operation is
-                        // done on a row-by-row basis.
-                        for (int j = 1; j < bytesInRow; j++) {
-                            bytes[aOffset + j] += bytes[aOffset + j - 1];
-                        }
-                        // pack the bytes into the integer bit-equivalent of
-                        // floating point values
-                        int index = planarIntOffset + i * scanSize;
-                        for (int j = 0; j < width; j++) {
-                            final int a = bytes[aOffset + j];
-                            final int b = bytes[bOffset + j];
-                            final int c = bytes[cOffset + j];
-                            final int d = bytes[dOffset + j];
-                            // Pack the 4 byte components into a single integer
-                            // in the byte order used by the TIFF standard
-                            samples[index++] = ((a & 0xff) << 24)
-                                | ((b & 0xff) << 16)
-                                | ((c & 0xff) << 8)
-                                | (d & 0xff);
-                        }
-                    }
-                }
-
+            } else if (bits > 8) {
+                sample = sample >> (bits - 8); // extend to byte.
             }
-            return samples;
-        }  // end of predictor==3 case.
-
-        // simple packing case, 64 or 32 bits --------------------------
-        if (bitsPerSample == 64) {
-            int k = 0;
-            int index = 0;
-            for (int i = 0; i < length; i++) {
-                for (int j = 0; j < scanSize; j++) {
-                    final long b0 = bytes[k++] & 0xffL;
-                    final long b1 = bytes[k++] & 0xffL;
-                    final long b2 = bytes[k++] & 0xffL;
-                    final long b3 = bytes[k++] & 0xffL;
-                    final long b4 = bytes[k++] & 0xffL;
-                    final long b5 = bytes[k++] & 0xffL;
-                    final long b6 = bytes[k++] & 0xffL;
-                    final long b7 = bytes[k++] & 0xffL;
-                    long sbits;
-                    if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                        sbits = (b7 << 56)
-                            | (b6 << 48)
-                            | (b5 << 40)
-                            | (b4 << 32)
-                            | (b3 << 24)
-                            | (b2 << 16)
-                            | (b1 << 8)
-                            | b0;
-
-                    } else {
-                        sbits = (b0 << 56)
-                            | (b1 << 48)
-                            | (b2 << 40)
-                            | (b3 << 32)
-                            | (b4 << 24)
-                            | (b5 << 16)
-                            | (b6 << 8)
-                            | b7;
-                    }
-                    // since the photometric interpreter does not
-                    // currently support doubles, we need to replace this
-                    // element with a float.  This action is inefficient and
-                    // should be improved.
-                    final float f = (float) Double.longBitsToDouble(sbits);
-                    samples[index++] = Float.floatToRawIntBits(f);
-                }
-            }
-        } else if (bitsPerSample == 32) {
-            int k = 0;
-            int index = 0;
-            for (int i = 0; i < length; i++) {
-                for (int j = 0; j < scanSize * samplesPerPixel; j++) {
-                    final int b0 = bytes[k++] & 0xff;
-                    final int b1 = bytes[k++] & 0xff;
-                    final int b2 = bytes[k++] & 0xff;
-                    final int b3 = bytes[k++] & 0xff;
-                    int sbits;
-                    if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                        sbits
-                            = (b3 << 24)
-                            | (b2 << 16)
-                            | (b1 << 8)
-                            | b0;
-
-                    } else {
-                        sbits
-                            = (b0 << 24)
-                            | (b1 << 16)
-                            | (b2 << 8)
-                            | b3;
-                    }
-                    // since the photometric interpreter does not
-                    // currently support doubles, we need to replace this
-                    // element with a float.  This action is inefficient and
-                    // should be improved.
-                    samples[index++] = sbits;
-                }
-            }
-        } else {
-            throw new ImageReadException(
-                "Imaging does not support floating-point samples with "
-                + bitsPerPixel + " bits per sample");
+            result[i] = sample;
         }
-
-        return samples;
     }
 
     /**
-     * Given a source file that specifies numerical data as short integers,
-     * unpack the raw bytes obtained from the source file and organize them into
-     * an array of integers.
-     * <p>
-     * This method supports either the tile format or the strip format of TIFF
-     * source files. The scan size indicates the number of columns to be
-     * extracted. For strips, the width and the scan size are always the full
-     * width of the image. For tiles, the scan size is the full width of the
-     * tile, but the "width" parameter may be smaller in the cases where the
-     * tiles do not evenly divide the width (for example, a 256 pixel wide tile
-     * in a 257 pixel wide image would result in two columns of tiles, the
-     * second column having only one column of pixels that were worth
-     * extracting.
+     * Checks if all the bits per sample entries are the same size
      *
-     * @param width the width of the data block to be extracted
-     * @param height the height of the data block to be extracted
-     * @param scanSize the number of pixels in a single row of the block
-     * @param bytes the raw bytes
-     * @param predictor the predictor specified by the source, only predictor 3
-     * is supported.
-     * @param bitsPerSample the number of bits per sample, 32 or 64.
-     * @param byteOrder the byte order for the source data
-     * @return a valid array of integers in row major order, dimensions
-     * scan-size wide and height.
+     * @param size the size to check
+     * @return true if all the bits per sample entries are the same
      */
-    protected int[] unpackIntSamples(
-        final int width,
-        final int height,
-        final int scanSize,
-        final byte[] bytes,
-        final int predictor,
-        final int bitsPerSample,
-        final ByteOrder byteOrder) {
-        final int bytesPerSample = bitsPerSample / 8;
-        final int nBytes = bytesPerSample * scanSize * height;
-        final int length = bytes.length < nBytes ? nBytes / scanSize : height;
-
-        final int[] samples = new int[scanSize * height];
-        // At this time, Commons Imaging only supports two-byte
-        // two's complement short integers.  It is assumed that
-        // the calling module already checked the arguments for
-        // compliance, so this method simply assumes that they are correct.
-
-        // The logic that follows is simplified by the fact that
-        // the existing API only supports two-byte signed integers.
-        final boolean useDifferencing
-                = predictor == TiffTagConstants.PREDICTOR_VALUE_HORIZONTAL_DIFFERENCING;
-
-        for (int i = 0; i < length; i++) {
-            final int index = i * scanSize;
-            int offset = index * bytesPerSample;
-            if (bitsPerSample == 16) {
-                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                    for (int j = 0; j < width; j++, offset += 2) {
-                        samples[index + j]
-                          = (bytes[offset + 1] << 8) | (bytes[offset] & 0xff);
-                    }
-                } else {
-                    for (int j = 0; j < width; j++, offset += 2) {
-                        samples[index + j]
-                          = (bytes[offset] << 8) | (bytes[offset + 1] & 0xff);
-                    }
-                }
-            } else if (bitsPerSample == 32) {
-                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                    for (int j = 0; j < width; j++, offset += 4) {
-                        samples[index + j]
-                          = (bytes[offset + 3] << 24)
-                          | ((bytes[offset + 2] & 0xff) << 16)
-                          | ((bytes[offset + 1] & 0xff) << 8)
-                          | (bytes[offset] & 0xff);
-                    }
-                } else {
-                    for (int j = 0; j < width; j++, offset += 4) {
-                        samples[index + j]
-                          = (bytes[offset] << 24)
-                          | ((bytes[offset + 1] & 0xff) << 16)
-                          | ((bytes[offset + 2] & 0xff) << 8)
-                          | (bytes[offset + 3] & 0xff);
-                    }
-                }
-            }
-            if (useDifferencing) {
-                for (int j = 1; j < width; j++) {
-                    samples[index + j] += samples[index + j - 1];
-                }
+    protected boolean isHomogenous(final int size) {
+        for (final int element : bitsPerSample) {
+            if (element != size) {
+                return false;
             }
         }
+        return true;
+    }
 
-        return samples;
+    /**
+     * Read the image data from the IFD associated with this instance of
+     * ImageDataReader using the optional sub-image specification if desired.
+     *
+     * @param subImageSpecification a rectangle describing a sub-region of the
+     * image for reading, or a null if the whole image is to be read.
+     * @param hasAlpha indicates that the image has an alpha (transparency)
+     * channel (RGB color model only).
+     * @param isAlphaPremultiplied indicates that the image uses the associated
+     * alpha channel format (pre-multiplied alpha).
+     * @return a valid instance containing the pixel data from the image.
+     * @throws IOException in the event of an unrecoverable I/O error.
+     * @throws ImagingException TODO
+     */
+    public abstract ImageBuilder readImageData(
+            Rectangle subImageSpecification,
+            boolean hasAlpha,
+            boolean isAlphaPremultiplied)
+            throws IOException, ImagingException;
+
+    /**
+     * Defines a method for accessing the floating-point raster data in a TIFF
+     * image. These implementations of this method in DataReaderStrips and
+     * DataReaderTiled assume that this instance is of a compatible data type
+     * (floating-point) and that all access checks have already been performed.
+     *
+     * @param subImage if non-null, instructs the access method to retrieve only
+     * a sub-section of the image data.
+     * @return a valid instance
+     * @throws ImagingException in the event of an incompatible data form.
+     * @throws IOException in the event of I/O error.
+     */
+    public abstract TiffRasterData readRasterData(Rectangle subImage)
+        throws ImagingException, IOException;
+
+    protected void resetPredictor() {
+        Arrays.fill(last, 0);
     }
 
     /**
@@ -883,17 +597,297 @@ public abstract class ImageDataReader {
     }
 
     /**
-     * Defines a method for accessing the floating-point raster data in a TIFF
-     * image. These implementations of this method in DataReaderStrips and
-     * DataReaderTiled assume that this instance is of a compatible data type
-     * (floating-point) and that all access checks have already been performed.
+     * Given a source file that specifies the floating-point data format, unpack
+     * the raw bytes obtained from the source file and organize them into an
+     * array of integers containing the bit-equivalent of IEEE-754 32-bit
+     * floats. Source files containing 64 bit doubles are downcast to floats.
+     * <p>
+     * This method supports either the tile format or the strip format of TIFF
+     * source files. The scan size indicates the number of columns to be
+     * extracted. For strips, the width and the scan size are always the full
+     * width of the image. For tiles, the scan size is the full width of the
+     * tile, but the width may be smaller in the cases where the tiles do not
+     * evenly divide the width (for example, a 256 pixel wide tile in a 257
+     * pixel wide image would result in two columns of tiles, the second column
+     * having only one column of pixels that were worth extracting.
      *
-     * @param subImage if non-null, instructs the access method to retrieve only
-     * a sub-section of the image data.
-     * @return a valid instance
-     * @throws ImageReadException in the event of an incompatible data form.
-     * @throws IOException in the event of I/O error.
+     * @param width the width of the data block to be extracted
+     * @param height the height of the data block to be extracted
+     * @param scanSize the number of pixels in a single row of the block
+     * @param bytes the raw bytes
+     * @param bitsPerPixel the number of bits per sample, 32 or 64.
+     * @param byteOrder the byte order for the source data
+     * @return a valid array of integers in row major order, dimensions
+     * scan-size wide and height.
+     * @throws ImagingException in the event of an invalid format.
      */
-    public abstract TiffRasterData readRasterData(Rectangle subImage)
-        throws ImageReadException, IOException;
+    protected int[] unpackFloatingPointSamples(
+        final int width,
+        final int height,
+        final int scanSize,
+        final byte[] bytes,
+        final int bitsPerPixel,
+        final ByteOrder byteOrder)
+        throws ImagingException {
+        final int bitsPerSample = bitsPerPixel / samplesPerPixel;
+        final int bytesPerSample = bitsPerSample / 8;
+        final int bytesPerScan = scanSize * samplesPerPixel * bytesPerSample;
+        final int nBytes = bytesPerScan * height;
+        final int length = bytes.length < nBytes ? nBytes / bytesPerScan : height;
+        final int[] samples = Allocator.intArray(scanSize * samplesPerPixel * height);
+        // floating-point differencing is indicated by a predictor value of 3.
+        if (predictor == TiffTagConstants.PREDICTOR_VALUE_FLOATING_POINT_DIFFERENCING) {
+            // at this time, this class supports the 32-bit format.  The
+            // main reason for this is that we have not located sample data
+            // that can be used for testing and analysis.
+            if (bitsPerPixel / samplesPerPixel != 32) {
+                throw new ImagingException(
+                    "Imaging does not yet support floating-point data"
+                    + " with predictor type 3 for "
+                    + bitsPerPixel + " bits per sample");
+            }
+
+            if (planarConfiguration == TiffPlanarConfiguration.CHUNKY) {
+                final int bytesInRow = scanSize * 4 * samplesPerPixel;
+                for (int i = 0; i < length; i++) {
+                    final int aOffset = i * bytesInRow;
+                    final int bOffset = aOffset + scanSize * samplesPerPixel;
+                    final int cOffset = bOffset + scanSize * samplesPerPixel;
+                    final int dOffset = cOffset + scanSize * samplesPerPixel;
+                    // in this loop, the source bytes give delta values.
+                    // we adjust them to give true values.  This operation is
+                    // done on a row-by-row basis.
+                    for (int j = 1; j < bytesInRow; j++) {
+                        bytes[aOffset + j] += bytes[aOffset + j - 1];
+                    }
+                    // pack the bytes into the integer bit-equivalent of
+                    // floating point values
+                    int index = i * scanSize;
+                    for (int j = 0; j < width * samplesPerPixel; j++) {
+                        final int a = bytes[aOffset + j];
+                        final int b = bytes[bOffset + j];
+                        final int c = bytes[cOffset + j];
+                        final int d = bytes[dOffset + j];
+                        // Pack the 4 byte components into a single integer
+                        // in the byte order used by the TIFF standard
+                        samples[index++] = ((a & 0xff) << 24)
+                            | ((b & 0xff) << 16)
+                            | ((c & 0xff) << 8)
+                            | (d & 0xff);
+                    }
+                }
+            } else {
+                final int bytesInRow = scanSize * 4;
+                for (int iPlane = 0; iPlane < samplesPerPixel; iPlane++) {
+                    final int planarIntOffset = iPlane * length * scanSize;
+                    final int planarByteOffset = planarIntOffset * 4;
+
+                    for (int i = 0; i < length; i++) {
+                        final int aOffset = i * bytesInRow + planarByteOffset;
+                        final int bOffset = aOffset + scanSize;
+                        final int cOffset = bOffset + scanSize;
+                        final int dOffset = cOffset + scanSize;
+                        // in this loop, the source bytes give delta values.
+                        // we adjust them to give true values.  This operation is
+                        // done on a row-by-row basis.
+                        for (int j = 1; j < bytesInRow; j++) {
+                            bytes[aOffset + j] += bytes[aOffset + j - 1];
+                        }
+                        // pack the bytes into the integer bit-equivalent of
+                        // floating point values
+                        int index = planarIntOffset + i * scanSize;
+                        for (int j = 0; j < width; j++) {
+                            final int a = bytes[aOffset + j];
+                            final int b = bytes[bOffset + j];
+                            final int c = bytes[cOffset + j];
+                            final int d = bytes[dOffset + j];
+                            // Pack the 4 byte components into a single integer
+                            // in the byte order used by the TIFF standard
+                            samples[index++] = ((a & 0xff) << 24)
+                                | ((b & 0xff) << 16)
+                                | ((c & 0xff) << 8)
+                                | (d & 0xff);
+                        }
+                    }
+                }
+
+            }
+            return samples;
+        }  // end of predictor==3 case.
+
+        // simple packing case, 64 or 32 bits --------------------------
+        if (bitsPerSample == 64) {
+            int k = 0;
+            int index = 0;
+            for (int i = 0; i < length; i++) {
+                for (int j = 0; j < scanSize; j++) {
+                    final long b0 = bytes[k++] & 0xffL;
+                    final long b1 = bytes[k++] & 0xffL;
+                    final long b2 = bytes[k++] & 0xffL;
+                    final long b3 = bytes[k++] & 0xffL;
+                    final long b4 = bytes[k++] & 0xffL;
+                    final long b5 = bytes[k++] & 0xffL;
+                    final long b6 = bytes[k++] & 0xffL;
+                    final long b7 = bytes[k++] & 0xffL;
+                    long sbits;
+                    if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+                        sbits = (b7 << 56)
+                            | (b6 << 48)
+                            | (b5 << 40)
+                            | (b4 << 32)
+                            | (b3 << 24)
+                            | (b2 << 16)
+                            | (b1 << 8)
+                            | b0;
+
+                    } else {
+                        sbits = (b0 << 56)
+                            | (b1 << 48)
+                            | (b2 << 40)
+                            | (b3 << 32)
+                            | (b4 << 24)
+                            | (b5 << 16)
+                            | (b6 << 8)
+                            | b7;
+                    }
+                    // since the photometric interpreter does not
+                    // currently support doubles, we need to replace this
+                    // element with a float.  This action is inefficient and
+                    // should be improved.
+                    final float f = (float) Double.longBitsToDouble(sbits);
+                    samples[index++] = Float.floatToRawIntBits(f);
+                }
+            }
+        } else if (bitsPerSample == 32) {
+            int k = 0;
+            int index = 0;
+            for (int i = 0; i < length; i++) {
+                for (int j = 0; j < scanSize * samplesPerPixel; j++) {
+                    final int b0 = bytes[k++] & 0xff;
+                    final int b1 = bytes[k++] & 0xff;
+                    final int b2 = bytes[k++] & 0xff;
+                    final int b3 = bytes[k++] & 0xff;
+                    int sbits;
+                    if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+                        sbits
+                            = (b3 << 24)
+                            | (b2 << 16)
+                            | (b1 << 8)
+                            | b0;
+
+                    } else {
+                        sbits
+                            = (b0 << 24)
+                            | (b1 << 16)
+                            | (b2 << 8)
+                            | b3;
+                    }
+                    // since the photometric interpreter does not
+                    // currently support doubles, we need to replace this
+                    // element with a float.  This action is inefficient and
+                    // should be improved.
+                    samples[index++] = sbits;
+                }
+            }
+        } else {
+            throw new ImagingException(
+                "Imaging does not support floating-point samples with "
+                + bitsPerPixel + " bits per sample");
+        }
+
+        return samples;
+    }
+
+    /**
+     * Given a source file that specifies numerical data as short integers,
+     * unpack the raw bytes obtained from the source file and organize them into
+     * an array of integers.
+     * <p>
+     * This method supports either the tile format or the strip format of TIFF
+     * source files. The scan size indicates the number of columns to be
+     * extracted. For strips, the width and the scan size are always the full
+     * width of the image. For tiles, the scan size is the full width of the
+     * tile, but the "width" parameter may be smaller in the cases where the
+     * tiles do not evenly divide the width (for example, a 256 pixel wide tile
+     * in a 257 pixel wide image would result in two columns of tiles, the
+     * second column having only one column of pixels that were worth
+     * extracting.
+     *
+     * @param width the width of the data block to be extracted
+     * @param height the height of the data block to be extracted
+     * @param scanSize the number of pixels in a single row of the block
+     * @param bytes the raw bytes
+     * @param predictor the predictor specified by the source, only predictor 3
+     * is supported.
+     * @param bitsPerSample the number of bits per sample, 32 or 64.
+     * @param byteOrder the byte order for the source data
+     * @return a valid array of integers in row major order, dimensions
+     * scan-size wide and height.
+     */
+    protected int[] unpackIntSamples(
+        final int width,
+        final int height,
+        final int scanSize,
+        final byte[] bytes,
+        final int predictor,
+        final int bitsPerSample,
+        final ByteOrder byteOrder) {
+        final int bytesPerSample = bitsPerSample / 8;
+        final int nBytes = bytesPerSample * scanSize * height;
+        final int length = bytes.length < nBytes ? nBytes / scanSize : height;
+
+        final int[] samples = Allocator.intArray(scanSize * height);
+        // At this time, Commons Imaging only supports two-byte
+        // two's complement short integers.  It is assumed that
+        // the calling module already checked the arguments for
+        // compliance, so this method simply assumes that they are correct.
+
+        // The logic that follows is simplified by the fact that
+        // the existing API only supports two-byte signed integers.
+        final boolean useDifferencing
+                = predictor == TiffTagConstants.PREDICTOR_VALUE_HORIZONTAL_DIFFERENCING;
+
+        for (int i = 0; i < length; i++) {
+            final int index = i * scanSize;
+            int offset = index * bytesPerSample;
+            if (bitsPerSample == 16) {
+                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+                    for (int j = 0; j < width; j++, offset += 2) {
+                        samples[index + j]
+                          = (bytes[offset + 1] << 8) | (bytes[offset] & 0xff);
+                    }
+                } else {
+                    for (int j = 0; j < width; j++, offset += 2) {
+                        samples[index + j]
+                          = (bytes[offset] << 8) | (bytes[offset + 1] & 0xff);
+                    }
+                }
+            } else if (bitsPerSample == 32) {
+                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
+                    for (int j = 0; j < width; j++, offset += 4) {
+                        samples[index + j]
+                          = (bytes[offset + 3] << 24)
+                          | ((bytes[offset + 2] & 0xff) << 16)
+                          | ((bytes[offset + 1] & 0xff) << 8)
+                          | (bytes[offset] & 0xff);
+                    }
+                } else {
+                    for (int j = 0; j < width; j++, offset += 4) {
+                        samples[index + j]
+                          = (bytes[offset] << 24)
+                          | ((bytes[offset + 1] & 0xff) << 16)
+                          | ((bytes[offset + 2] & 0xff) << 8)
+                          | (bytes[offset + 3] & 0xff);
+                    }
+                }
+            }
+            if (useDifferencing) {
+                for (int j = 1; j < width; j++) {
+                    samples[index + j] += samples[index + j - 1];
+                }
+            }
+        }
+
+        return samples;
+    }
 }

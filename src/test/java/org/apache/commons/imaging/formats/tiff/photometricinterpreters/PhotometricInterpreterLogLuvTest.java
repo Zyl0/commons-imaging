@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.io.IOException;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageBuilder;
 import org.apache.commons.imaging.formats.tiff.photometricinterpreters.PhotometricInterpreterLogLuv.TristimulusValues;
 import org.junit.jupiter.api.Assertions;
@@ -55,22 +55,6 @@ public class PhotometricInterpreterLogLuvTest {
     }
 
     @Test
-    public void testGetTristimulusValues() {
-        // any value equals 0 will have its pow(N, 3) equal to 0
-        assertEquals(0.0d, p.getTristimulusValues(0, 0, 0).x, 0.001d);
-        assertEquals(0.0d, p.getTristimulusValues(0, 0, 0).y, 0.001d);
-        assertEquals(0.0d, p.getTristimulusValues(0, 0, 0).z, 0.001d);
-        // values under the threshold used in the if statements
-        assertEquals(0.04126d, p.getTristimulusValues(1, 0, 0).x, 0.001d);
-        assertEquals(0.04341d, p.getTristimulusValues(1, 0, 0).y, 0.001d);
-        assertEquals(0.04727d, p.getTristimulusValues(1, 0, 0).z, 0.001d);
-        // values under the threshold used in the if statements
-        assertEquals(29.36116d, p.getTristimulusValues(100, 100, 50).x, 0.001d);
-        assertEquals(10.78483d, p.getTristimulusValues(100, 100, 50).y, 0.001d);
-        assertEquals(1.25681d, p.getTristimulusValues(100, 100, 50).z, 0.001d);
-    }
-
-    @Test
     public void testGetRgbValues() {
         // any value equals 0 will have its pow(N, 3) equal to 0
         final TristimulusValues triValues = new TristimulusValues();
@@ -89,21 +73,37 @@ public class PhotometricInterpreterLogLuvTest {
     }
 
     @Test
-    public void testInterpretPixelNullSamples() {
-        Assertions.assertThrows(ImageReadException.class, () -> p.interpretPixel(null, null, 0, 0));
+    public void testGetTristimulusValues() {
+        // any value equals 0 will have its pow(N, 3) equal to 0
+        assertEquals(0.0d, p.getTristimulusValues(0, 0, 0).x, 0.001d);
+        assertEquals(0.0d, p.getTristimulusValues(0, 0, 0).y, 0.001d);
+        assertEquals(0.0d, p.getTristimulusValues(0, 0, 0).z, 0.001d);
+        // values under the threshold used in the if statements
+        assertEquals(0.04126d, p.getTristimulusValues(1, 0, 0).x, 0.001d);
+        assertEquals(0.04341d, p.getTristimulusValues(1, 0, 0).y, 0.001d);
+        assertEquals(0.04727d, p.getTristimulusValues(1, 0, 0).z, 0.001d);
+        // values under the threshold used in the if statements
+        assertEquals(29.36116d, p.getTristimulusValues(100, 100, 50).x, 0.001d);
+        assertEquals(10.78483d, p.getTristimulusValues(100, 100, 50).y, 0.001d);
+        assertEquals(1.25681d, p.getTristimulusValues(100, 100, 50).z, 0.001d);
     }
 
     @Test
-    public void testInterpretPixelEmptySamples() {
-        Assertions.assertThrows(ImageReadException.class, () -> p.interpretPixel(null, new int[] {}, 0, 0));
-    }
-
-    @Test
-    public void testInterpretPixel() throws ImageReadException, IOException {
+    public void testInterpretPixel() throws ImagingException, IOException {
         final ImageBuilder imgBuilder = new ImageBuilder(600, 400, /*alpha*/ true);
         final int x = 10;
         final int y = 20;
         p.interpretPixel(imgBuilder, new int[] {100, (byte) 32, (byte) 2}, x, y);
         assertEquals(-7584166, imgBuilder.getRGB(x, y));
+    }
+
+    @Test
+    public void testInterpretPixelEmptySamples() {
+        Assertions.assertThrows(ImagingException.class, () -> p.interpretPixel(null, new int[] {}, 0, 0));
+    }
+
+    @Test
+    public void testInterpretPixelNullSamples() {
+        Assertions.assertThrows(ImagingException.class, () -> p.interpretPixel(null, null, 0, 0));
     }
 }

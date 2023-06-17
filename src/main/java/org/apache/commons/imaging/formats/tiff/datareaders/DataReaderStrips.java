@@ -21,11 +21,12 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.ByteOrder;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.ImageBuilder;
-import org.apache.commons.imaging.formats.tiff.TiffRasterData;
 import org.apache.commons.imaging.formats.tiff.TiffDirectory;
 import org.apache.commons.imaging.formats.tiff.TiffImageData;
+import org.apache.commons.imaging.formats.tiff.TiffRasterData;
 import org.apache.commons.imaging.formats.tiff.TiffRasterDataFloat;
 import org.apache.commons.imaging.formats.tiff.TiffRasterDataInt;
 import org.apache.commons.imaging.formats.tiff.constants.TiffPlanarConfiguration;
@@ -73,7 +74,7 @@ public final class DataReaderStrips extends ImageDataReader {
             final ImageBuilder imageBuilder,
             final byte[] bytes,
             final int pixelsPerStrip,
-            final int yLimit) throws ImageReadException, IOException {
+            final int yLimit) throws ImagingException, IOException {
         if (y >= yLimit) {
             return;
         }
@@ -218,7 +219,7 @@ public final class DataReaderStrips extends ImageDataReader {
         // special case handled above
         try (BitInputStream bis = new BitInputStream(new ByteArrayInputStream(bytes), byteOrder)) {
 
-            int[] samples = new int[bitsPerSampleLength];
+            int[] samples = Allocator.intArray(bitsPerSampleLength);
             resetPredictor();
             for (int i = 0; i < pixelsPerStrip; i++) {
                 getSamplesAsBytes(bis, samples);
@@ -247,7 +248,7 @@ public final class DataReaderStrips extends ImageDataReader {
     public ImageBuilder readImageData(final Rectangle subImageSpecification,
         final boolean hasAlpha,
         final boolean isAlphaPreMultiplied)
-        throws ImageReadException, IOException {
+        throws IOException, ImagingException {
 
         final Rectangle subImage;
         if (subImageSpecification == null) {
@@ -309,7 +310,7 @@ public final class DataReaderStrips extends ImageDataReader {
                 final long bytesPerStrip = rowsInThisStrip * bytesPerRow;
                 final long pixelsPerStrip = rowsInThisStrip * width;
 
-                final byte[] b = new byte[(int) bytesPerStrip];
+                final byte[] b = Allocator.byteArray((int) bytesPerStrip);
                 for (int iPlane = 0; iPlane < 3; iPlane++) {
                     final int planeStrip = iPlane * nStripsInPlane + strip;
                     final byte[] compressed = imageData.getImageData(planeStrip).getData();
@@ -342,20 +343,20 @@ public final class DataReaderStrips extends ImageDataReader {
 
     @Override
     public TiffRasterData readRasterData(final Rectangle subImage)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         switch (sampleFormat) {
             case TiffTagConstants.SAMPLE_FORMAT_VALUE_IEEE_FLOATING_POINT:
                 return readRasterDataFloat(subImage);
             case TiffTagConstants.SAMPLE_FORMAT_VALUE_TWOS_COMPLEMENT_SIGNED_INTEGER:
                 return readRasterDataInt(subImage);
             default:
-                throw new ImageReadException("Unsupported sample format, value="
+                throw new ImagingException("Unsupported sample format, value="
                         + sampleFormat);
         }
     }
 
     private TiffRasterData readRasterDataFloat(final Rectangle subImage)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         int xRaster;
         int yRaster;
         int rasterWidth;
@@ -372,7 +373,7 @@ public final class DataReaderStrips extends ImageDataReader {
             rasterHeight = height;
         }
 
-        final float[] rasterDataFloat = new float[rasterWidth * rasterHeight * samplesPerPixel];
+        final float[] rasterDataFloat = Allocator.floatArray(rasterWidth * rasterHeight * samplesPerPixel);
 
         // the legacy code is optimized to the reading of whole
         // strips (except for the last strip in the image, which can
@@ -408,7 +409,7 @@ public final class DataReaderStrips extends ImageDataReader {
     }
 
     private TiffRasterData readRasterDataInt(final Rectangle subImage)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         int xRaster;
         int yRaster;
         int rasterWidth;
@@ -425,7 +426,7 @@ public final class DataReaderStrips extends ImageDataReader {
             rasterHeight = height;
         }
 
-        final int[] rasterDataInt = new int[rasterWidth * rasterHeight];
+        final int[] rasterDataInt = Allocator.intArray(rasterWidth * rasterHeight);
 
         // the legacy code is optimized to the reading of whole
         // strips (except for the last strip in the image, which can

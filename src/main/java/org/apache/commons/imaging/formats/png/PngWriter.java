@@ -25,13 +25,14 @@ import java.util.List;
 import java.util.zip.Deflater;
 import java.util.zip.DeflaterOutputStream;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.PixelDensity;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.internal.Debug;
 import org.apache.commons.imaging.palette.Palette;
 import org.apache.commons.imaging.palette.PaletteFactory;
 
-class PngWriter {
+public class PngWriter {
 
     /*
      1. IHDR: image header, which is the first chunk in a PNG datastream.
@@ -47,32 +48,6 @@ class PngWriter {
      4. Miscellaneous information: bKGD, hIST, pHYs, sPLT (see 11.3.5: Miscellaneous information).
      5. Time information: tIME (see 11.3.6: Time stamp information).
     */
-
-    private void writeInt(final OutputStream os, final int value) throws IOException {
-        os.write(0xff & (value >> 24));
-        os.write(0xff & (value >> 16));
-        os.write(0xff & (value >> 8));
-        os.write(0xff & (value >> 0));
-    }
-
-    private void writeChunk(final OutputStream os, final ChunkType chunkType,
-            final byte[] data) throws IOException {
-        final int dataLength = data == null ? 0 : data.length;
-        writeInt(os, dataLength);
-        os.write(chunkType.array);
-        if (data != null) {
-            os.write(data);
-        }
-
-        final PngCrc png_crc = new PngCrc();
-
-        final long crc1 = png_crc.start_partial_crc(chunkType.array, chunkType.array.length);
-        final long crc2 = data == null ? crc1 : png_crc.continue_partial_crc(
-                crc1, data, data.length);
-        final int crc = (int) png_crc.finish_partial_crc(crc2);
-
-        writeInt(os, crc);
-    }
 
     private static class ImageHeader {
         public final int width;
@@ -97,6 +72,55 @@ class PngWriter {
 
     }
 
+    private byte[] deflate(final byte[] bytes) throws IOException {
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            try (DeflaterOutputStream dos = new DeflaterOutputStream(baos)) {
+                dos.write(bytes);
+                // dos.flush() doesn't work - we must close it before baos.toByteArray()
+            }
+            return baos.toByteArray();
+        }
+    }
+
+    private byte getBitDepth(final PngColorType pngColorType, final PngImagingParameters params) {
+        final byte depth = params.getBitDepth();
+
+        return pngColorType.isBitDepthAllowed(depth) ? depth : PngImagingParameters.DEFAULT_BIT_DEPTH;
+    }
+
+    private boolean isValidISO_8859_1(final String s) {
+        final String roundtrip = new String(s.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.ISO_8859_1);
+        return s.equals(roundtrip);
+    }
+
+    private void writeChunk(final OutputStream os, final ChunkType chunkType,
+            final byte[] data) throws IOException {
+        final int dataLength = data == null ? 0 : data.length;
+        writeInt(os, dataLength);
+        os.write(chunkType.array);
+        if (data != null) {
+            os.write(data);
+        }
+
+        final PngCrc png_crc = new PngCrc();
+
+        final long crc1 = png_crc.start_partial_crc(chunkType.array, chunkType.array.length);
+        final long crc2 = data == null ? crc1 : png_crc.continue_partial_crc(
+                crc1, data, data.length);
+        final int crc = (int) png_crc.finish_partial_crc(crc2);
+
+        writeInt(os, crc);
+    }
+
+    private void writeChunkIDAT(final OutputStream os, final byte[] bytes)
+            throws IOException {
+        writeChunk(os, ChunkType.IDAT, bytes);
+    }
+
+    private void writeChunkIEND(final OutputStream os) throws IOException {
+        writeChunk(os, ChunkType.IEND, null);
+    }
+
     private void writeChunkIHDR(final OutputStream os, final ImageHeader value) throws IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
         writeInt(baos, value.width);
@@ -111,12 +135,12 @@ class PngWriter {
     }
 
     private void writeChunkiTXt(final OutputStream os, final PngText.Itxt text)
-            throws IOException, ImageWriteException {
+            throws IOException, ImagingException {
         if (!isValidISO_8859_1(text.keyword)) {
-            throw new ImageWriteException("Png tEXt chunk keyword is not ISO-8859-1: " + text.keyword);
+            throw new ImagingException("PNG tEXt chunk keyword is not ISO-8859-1: " + text.keyword);
         }
         if (!isValidISO_8859_1(text.languageTag)) {
-            throw new ImageWriteException("Png tEXt chunk language tag is not ISO-8859-1: " + text.languageTag);
+            throw new ImagingException("PNG tEXt chunk language tag is not ISO-8859-1: " + text.languageTag);
         }
 
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -141,37 +165,62 @@ class PngWriter {
         writeChunk(os, ChunkType.iTXt, baos.toByteArray());
     }
 
-    private void writeChunkzTXt(final OutputStream os, final PngText.Ztxt text)
-            throws IOException, ImageWriteException {
-        if (!isValidISO_8859_1(text.keyword)) {
-            throw new ImageWriteException("Png zTXt chunk keyword is not ISO-8859-1: " + text.keyword);
-        }
-        if (!isValidISO_8859_1(text.text)) {
-            throw new ImageWriteException("Png zTXt chunk text is not ISO-8859-1: " + text.text);
+    private void writeChunkPHYS(final OutputStream os, final int xPPU, final int yPPU, final byte units)
+            throws IOException {
+        final byte[] bytes = new byte[9];
+        bytes[0] = (byte) (0xff & (xPPU >> 24));
+        bytes[1] = (byte) (0xff & (xPPU >> 16));
+        bytes[2] = (byte) (0xff & (xPPU >> 8));
+        bytes[3] = (byte) (0xff & (xPPU >> 0));
+        bytes[4] = (byte) (0xff & (yPPU >> 24));
+        bytes[5] = (byte) (0xff & (yPPU >> 16));
+        bytes[6] = (byte) (0xff & (yPPU >> 8));
+        bytes[7] = (byte) (0xff & (yPPU >> 0));
+        bytes[8] = units;
+        writeChunk(os, ChunkType.pHYs, bytes);
+    }
+
+    private void writeChunkPLTE(final OutputStream os, final Palette palette)
+            throws IOException {
+        final int length = palette.length();
+        final byte[] bytes = Allocator.byteArray(length * 3);
+
+        // Debug.debug("length", length);
+        for (int i = 0; i < length; i++) {
+            final int rgb = palette.getEntry(i);
+            final int index = i * 3;
+            // Debug.debug("index", index);
+            bytes[index + 0] = (byte) (0xff & (rgb >> 16));
+            bytes[index + 1] = (byte) (0xff & (rgb >> 8));
+            bytes[index + 2] = (byte) (0xff & (rgb >> 0));
         }
 
+        writeChunk(os, ChunkType.PLTE, bytes);
+    }
+
+    private void writeChunkSCAL(final OutputStream os, final double xUPP, final double yUPP, final byte units)
+          throws IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-        // keyword
-        baos.write(text.keyword.getBytes(StandardCharsets.ISO_8859_1));
+        // unit specifier
+        baos.write(units);
+
+        // units per pixel, x-axis
+        baos.write(String.valueOf(xUPP).getBytes(StandardCharsets.ISO_8859_1));
         baos.write(0);
 
-        // compression method
-        baos.write(PngConstants.COMPRESSION_DEFLATE_INFLATE);
+        baos.write(String.valueOf(yUPP).getBytes(StandardCharsets.ISO_8859_1));
 
-        // text
-        baos.write(deflate(text.text.getBytes(StandardCharsets.ISO_8859_1)));
-
-        writeChunk(os, ChunkType.zTXt, baos.toByteArray());
+        writeChunk(os, ChunkType.sCAL, baos.toByteArray());
     }
 
     private void writeChunktEXt(final OutputStream os, final PngText.Text text)
-            throws IOException, ImageWriteException {
+            throws IOException, ImagingException {
         if (!isValidISO_8859_1(text.keyword)) {
-            throw new ImageWriteException("Png tEXt chunk keyword is not ISO-8859-1: " + text.keyword);
+            throw new ImagingException("PNG tEXt chunk keyword is not ISO-8859-1: " + text.keyword);
         }
         if (!isValidISO_8859_1(text.text)) {
-            throw new ImageWriteException("Png tEXt chunk text is not ISO-8859-1: " + text.text);
+            throw new ImagingException("PNG tEXt chunk text is not ISO-8859-1: " + text.text);
         }
 
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -186,19 +235,14 @@ class PngWriter {
         writeChunk(os, ChunkType.tEXt, baos.toByteArray());
     }
 
-    private byte[] deflate(final byte[] bytes) throws IOException {
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            try (DeflaterOutputStream dos = new DeflaterOutputStream(baos)) {
-                dos.write(bytes);
-                // dos.flush() doesn't work - we must close it before baos.toByteArray()
-            }
-            return baos.toByteArray();
-        }
-    }
+    private void writeChunkTRNS(final OutputStream os, final Palette palette) throws IOException {
+        final byte[] bytes = Allocator.byteArray(palette.length());
 
-    private boolean isValidISO_8859_1(final String s) {
-        final String roundtrip = new String(s.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.ISO_8859_1);
-        return s.equals(roundtrip);
+        for (int i = 0; i < bytes.length; i++) {
+            bytes[i] = (byte) (0xff & (palette.getEntry(i) >> 24));
+        }
+
+        writeChunk(os, ChunkType.tRNS, bytes);
     }
 
     private void writeChunkXmpiTXt(final OutputStream os, final String xmpXml)
@@ -224,78 +268,28 @@ class PngWriter {
         writeChunk(os, ChunkType.iTXt, baos.toByteArray());
     }
 
-    private void writeChunkPLTE(final OutputStream os, final Palette palette)
-            throws IOException {
-        final int length = palette.length();
-        final byte[] bytes = new byte[length * 3];
-
-        // Debug.debug("length", length);
-        for (int i = 0; i < length; i++) {
-            final int rgb = palette.getEntry(i);
-            final int index = i * 3;
-            // Debug.debug("index", index);
-            bytes[index + 0] = (byte) (0xff & (rgb >> 16));
-            bytes[index + 1] = (byte) (0xff & (rgb >> 8));
-            bytes[index + 2] = (byte) (0xff & (rgb >> 0));
+    private void writeChunkzTXt(final OutputStream os, final PngText.Ztxt text)
+            throws IOException, ImagingException {
+        if (!isValidISO_8859_1(text.keyword)) {
+            throw new ImagingException("PNG zTXt chunk keyword is not ISO-8859-1: " + text.keyword);
+        }
+        if (!isValidISO_8859_1(text.text)) {
+            throw new ImagingException("PNG zTXt chunk text is not ISO-8859-1: " + text.text);
         }
 
-        writeChunk(os, ChunkType.PLTE, bytes);
-    }
-
-    private void writeChunkTRNS(final OutputStream os, final Palette palette) throws IOException {
-        final byte[] bytes = new byte[palette.length()];
-
-        for (int i = 0; i < bytes.length; i++) {
-            bytes[i] = (byte) (0xff & (palette.getEntry(i) >> 24));
-        }
-
-        writeChunk(os, ChunkType.tRNS, bytes);
-    }
-
-    private void writeChunkIEND(final OutputStream os) throws IOException {
-        writeChunk(os, ChunkType.IEND, null);
-    }
-
-    private void writeChunkIDAT(final OutputStream os, final byte[] bytes)
-            throws IOException {
-        writeChunk(os, ChunkType.IDAT, bytes);
-    }
-
-    private void writeChunkPHYS(final OutputStream os, final int xPPU, final int yPPU, final byte units)
-            throws IOException {
-        final byte[] bytes = new byte[9];
-        bytes[0] = (byte) (0xff & (xPPU >> 24));
-        bytes[1] = (byte) (0xff & (xPPU >> 16));
-        bytes[2] = (byte) (0xff & (xPPU >> 8));
-        bytes[3] = (byte) (0xff & (xPPU >> 0));
-        bytes[4] = (byte) (0xff & (yPPU >> 24));
-        bytes[5] = (byte) (0xff & (yPPU >> 16));
-        bytes[6] = (byte) (0xff & (yPPU >> 8));
-        bytes[7] = (byte) (0xff & (yPPU >> 0));
-        bytes[8] = units;
-        writeChunk(os, ChunkType.pHYs, bytes);
-    }
-
-    private void writeChunkSCAL(final OutputStream os, final double xUPP, final double yUPP, final byte units)
-          throws IOException {
         final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-        // unit specifier
-        baos.write(units);
-
-        // units per pixel, x-axis
-        baos.write(String.valueOf(xUPP).getBytes(StandardCharsets.ISO_8859_1));
+        // keyword
+        baos.write(text.keyword.getBytes(StandardCharsets.ISO_8859_1));
         baos.write(0);
 
-        baos.write(String.valueOf(yUPP).getBytes(StandardCharsets.ISO_8859_1));
+        // compression method
+        baos.write(PngConstants.COMPRESSION_DEFLATE_INFLATE);
 
-        writeChunk(os, ChunkType.sCAL, baos.toByteArray());
-    }
+        // text
+        baos.write(deflate(text.text.getBytes(StandardCharsets.ISO_8859_1)));
 
-    private byte getBitDepth(final PngColorType pngColorType, final PngImagingParameters params) {
-        final byte depth = params.getBitDepth();
-
-        return pngColorType.isBitDepthAllowed(depth) ? depth : PngImagingParameters.DEFAULT_BIT_DEPTH;
+        writeChunk(os, ChunkType.zTXt, baos.toByteArray());
     }
 
     /*
@@ -327,20 +321,34 @@ class PngWriter {
      tEXt   Yes None
      zTXt   Yes None
      */
-    public void writeImage(final BufferedImage src, final OutputStream os, PngImagingParameters params) throws ImageWriteException, IOException {
+
+    /**
+     * Writes an image to an output stream.
+     *
+     * @param src The image to write.
+     * @param os The output stream to write to.
+     * @param params The parameters to use (can be {@code NULL} to use the default {@link PngImagingParameters}).
+     * @param paletteFactory The palette factory to use (can be {@code NULL} to use the default {@link PaletteFactory}).
+     * @throws ImagingException When errors are detected.
+     * @throws IOException When IO problems occur.
+     */
+    public void writeImage(final BufferedImage src, final OutputStream os, PngImagingParameters params, PaletteFactory paletteFactory) throws ImagingException, IOException {
         if (params == null) {
             params = new PngImagingParameters();
+        }
+        if (paletteFactory == null) {
+            paletteFactory = new PaletteFactory();
         }
         final int compressionLevel = Deflater.DEFAULT_COMPRESSION;
 
         final int width = src.getWidth();
         final int height = src.getHeight();
 
-        final boolean hasAlpha = new PaletteFactory().hasTransparency(src);
+        final boolean hasAlpha = paletteFactory.hasTransparency(src);
         Debug.debug("hasAlpha: " + hasAlpha);
-        // int transparency = new PaletteFactory().getTransparency(src);
+        // int transparency = paletteFactory.getTransparency(src);
 
-        boolean isGrayscale = new PaletteFactory().isGrayscale(src);
+        boolean isGrayscale = paletteFactory.isGrayscale(src);
         Debug.debug("isGrayscale: " + isGrayscale);
 
         PngColorType pngColorType;
@@ -349,7 +357,7 @@ class PngWriter {
             final boolean forceTrueColor = params.isForceTrueColor();
 
             if (forceIndexedColor && forceTrueColor) {
-                throw new ImageWriteException(
+                throw new ImagingException(
                         "Params: Cannot force both indexed and true color modes");
             }
             if (forceIndexedColor) {
@@ -403,8 +411,6 @@ class PngWriter {
 
             final int maxColors = 256;
 
-            final PaletteFactory paletteFactory = new PaletteFactory();
-
             if (hasAlpha) {
                 palette = paletteFactory.makeQuantizedRgbaPalette(src, hasAlpha, maxColors);
                 writeChunkPLTE(os, palette);
@@ -453,7 +459,7 @@ class PngWriter {
                 } else if (text instanceof PngText.Itxt) {
                     writeChunkiTXt(os, (PngText.Itxt) text);
                 } else {
-                    throw new ImageWriteException("Unknown text to embed in PNG: " + text);
+                    throw new ImagingException("Unknown text to embed in PNG: " + text);
                 }
             }
         }
@@ -477,7 +483,7 @@ class PngWriter {
                 final boolean useAlpha = pngColorType == PngColorType.GREYSCALE_WITH_ALPHA
                         || pngColorType == PngColorType.TRUE_COLOR_WITH_ALPHA;
 
-                final int[] row = new int[width];
+                final int[] row = Allocator.intArray(width);
                 for (int y = 0; y < height; y++) {
                     // Debug.debug("y", y + "/" + height);
                     src.getRGB(0, y, width, 1, row, 0, width);
@@ -528,7 +534,7 @@ class PngWriter {
                 final boolean useAlpha = pngColorType == PngColorType.GREYSCALE_WITH_ALPHA
                         || pngColorType == PngColorType.TRUE_COLOR_WITH_ALPHA;
 
-                final int[] row = new int[width];
+                final int[] row = Allocator.intArray(width);
                 for (int y = 0; y < height; y++) {
                     // Debug.debug("y", y + "/" + height);
                     src.getRGB(0, y, width, 1, row, 0, width);
@@ -626,4 +632,11 @@ class PngWriter {
     } // todo: filter types
       // proper colour types
       // srgb, etc.
+
+    private void writeInt(final OutputStream os, final int value) throws IOException {
+        os.write(0xff & (value >> 24));
+        os.write(0xff & (value >> 16));
+        os.write(0xff & (value >> 8));
+        os.write(0xff & (value >> 0));
+    }
 }

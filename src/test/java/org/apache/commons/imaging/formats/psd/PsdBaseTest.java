@@ -22,19 +22,19 @@ import java.util.List;
 
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
-import org.apache.commons.imaging.ImageReadException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.ImagingTest;
 
 public abstract class PsdBaseTest extends ImagingTest {
+    private static final ImageFilter IMAGE_FILTER = PsdBaseTest::isPsd;
+
     private static boolean isPsd(final File file) throws IOException {
         final ImageFormat format = Imaging.guessFormat(file);
         return format == ImageFormats.PSD;
     }
 
-    private static final ImageFilter IMAGE_FILTER = PsdBaseTest::isPsd;
-
-    protected List<File> getPsdImages() throws IOException, ImageReadException {
+    protected List<File> getPsdImages() throws IOException, ImagingException {
         return getTestImages(IMAGE_FILTER);
     }
 

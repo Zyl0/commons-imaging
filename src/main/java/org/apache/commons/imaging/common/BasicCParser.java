@@ -23,7 +23,7 @@ import java.io.InputStream;
 import java.io.PushbackInputStream;
 import java.util.Map;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 
 /**
  * A rudimentary preprocessor and parser for the C programming
@@ -32,316 +32,6 @@ import org.apache.commons.imaging.ImageReadException;
  * FIXME replace this by a parser generated via ANTLR (if we really need it?!)
  */
 public class BasicCParser {
-    private final PushbackInputStream is;
-
-    public BasicCParser(final ByteArrayInputStream is) {
-        this.is = new PushbackInputStream(is);
-    }
-
-    public String nextToken() throws IOException, ImageReadException {
-        // I don't know how complete the C parsing in an XPM file
-        // is meant to be, this is just the very basics...
-
-        boolean inString = false;
-        boolean inIdentifier = false;
-        boolean hadBackSlash = false;
-        final StringBuilder token = new StringBuilder();
-        for (int c = is.read(); c != -1; c = is.read()) {
-            if (inString) {
-                switch (c) {
-                case '\\':
-                    token.append('\\');
-                    hadBackSlash = !hadBackSlash;
-                    break;
-                case '"':
-                    token.append('"');
-                    if (!hadBackSlash) {
-                        return token.toString();
-                    }
-                    hadBackSlash = false;
-                    break;
-                case '\r':
-                case '\n':
-                    throw new ImageReadException(
-                            "Unterminated string in XPM file");
-                default:
-                    token.append((char) c);
-                    hadBackSlash = false;
-                    break;
-                }
-            } else if (inIdentifier) {
-                if (!Character.isLetterOrDigit(c) && (c != '_')) {
-                    is.unread(c);
-                    return token.toString();
-                }
-                token.append((char) c);
-            } else {
-                if (c == '"') {
-                    token.append('"');
-                    inString = true;
-                } else if (Character.isLetterOrDigit(c) || c == '_') {
-                    token.append((char) c);
-                    inIdentifier = true;
-                } else if (c == '{' || c == '}' || c == '[' || c == ']'
-                        || c == '*' || c == ';' || c == '=' || c == ',') {
-                    token.append((char) c);
-                    return token.toString();
-                } else if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
-                    // ignore
-                } else {
-                    throw new ImageReadException(
-                            "Unhandled/invalid character '" + ((char) c)
-                                    + "' found in XPM file");
-                }
-            }
-        }
-
-        if (inIdentifier) {
-            return token.toString();
-        }
-        if (inString) {
-            throw new ImageReadException("Unterminated string ends XMP file");
-        }
-        return null;
-    }
-
-    public static ByteArrayOutputStream preprocess(final InputStream is,
-            final StringBuilder firstComment, final Map<String, String> defines)
-            throws IOException, ImageReadException {
-        boolean inSingleQuotes = false;
-        boolean inString = false;
-        boolean inComment = false;
-        boolean inDirective = false;
-        boolean hadSlash = false;
-        boolean hadStar = false;
-        boolean hadBackSlash = false;
-        final ByteArrayOutputStream out = new ByteArrayOutputStream();
-        boolean seenFirstComment = (firstComment == null);
-        final StringBuilder directiveBuffer = new StringBuilder();
-        for (int c = is.read(); c != -1; c = is.read()) {
-            if (inComment) {
-                if (c == '*') {
-                    if (hadStar && !seenFirstComment) {
-                        firstComment.append('*');
-                    }
-                    hadStar = true;
-                } else if (c == '/') {
-                    if (hadStar) {
-                        hadStar = false;
-                        inComment = false;
-                        seenFirstComment = true;
-                    } else {
-                        if (!seenFirstComment) {
-                            firstComment.append((char) c);
-                        }
-                    }
-                } else {
-                    if (hadStar && !seenFirstComment) {
-                        firstComment.append('*');
-                    }
-                    hadStar = false;
-                    if (!seenFirstComment) {
-                        firstComment.append((char) c);
-                    }
-                }
-            } else if (inSingleQuotes) {
-                switch (c) {
-                case '\\':
-                    if (hadBackSlash) {
-                        out.write('\\');
-                        out.write('\\');
-                        hadBackSlash = false;
-                    } else {
-                        hadBackSlash = true;
-                    }
-                    break;
-                case '\'':
-                    if (hadBackSlash) {
-                        out.write('\\');
-                        hadBackSlash = false;
-                    } else {
-                        inSingleQuotes = false;
-                    }
-                    out.write('\'');
-                    break;
-                case '\r':
-                case '\n':
-                    throw new ImageReadException("Unterminated single quote in file");
-                default:
-                    if (hadBackSlash) {
-                        out.write('\\');
-                        hadBackSlash = false;
-                    }
-                    out.write(c);
-                    break;
-                }
-            } else if (inString) {
-                switch (c) {
-                case '\\':
-                    if (hadBackSlash) {
-                        out.write('\\');
-                        out.write('\\');
-                        hadBackSlash = false;
-                    } else {
-                        hadBackSlash = true;
-                    }
-                    break;
-                case '"':
-                    if (hadBackSlash) {
-                        out.write('\\');
-                        hadBackSlash = false;
-                    } else {
-                        inString = false;
-                    }
-                    out.write('"');
-                    break;
-                case '\r':
-                case '\n':
-                    throw new ImageReadException("Unterminated string in file");
-                default:
-                    if (hadBackSlash) {
-                        out.write('\\');
-                        hadBackSlash = false;
-                    }
-                    out.write(c);
-                    break;
-                }
-            } else if (inDirective) {
-                if (c == '\r' || c == '\n') {
-                    inDirective = false;
-                    final String[] tokens = tokenizeRow(directiveBuffer.toString());
-                    if (tokens.length < 2 || tokens.length > 3) {
-                        throw new ImageReadException("Bad preprocessor directive");
-                    }
-                    if (!tokens[0].equals("define")) {
-                        throw new ImageReadException("Invalid/unsupported "
-                                + "preprocessor directive '" + tokens[0] + "'");
-                    }
-                    defines.put(tokens[1], (tokens.length == 3) ? tokens[2]
-                            : null);
-                    directiveBuffer.setLength(0);
-                } else {
-                    directiveBuffer.append((char) c);
-                }
-            } else {
-                switch (c) {
-                case '/':
-                    if (hadSlash) {
-                        out.write('/');
-                    }
-                    hadSlash = true;
-                    break;
-                case '*':
-                    if (hadSlash) {
-                        inComment = true;
-                        hadSlash = false;
-                    } else {
-                        out.write(c);
-                    }
-                    break;
-                case '\'':
-                    if (hadSlash) {
-                        out.write('/');
-                    }
-                    hadSlash = false;
-                    out.write(c);
-                    inSingleQuotes = true;
-                    break;
-                case '"':
-                    if (hadSlash) {
-                        out.write('/');
-                    }
-                    hadSlash = false;
-                    out.write(c);
-                    inString = true;
-                    break;
-                case '#':
-                    if (defines == null) {
-                        throw new ImageReadException("Unexpected preprocessor directive");
-                    }
-                    inDirective = true;
-                    break;
-                default:
-                    if (hadSlash) {
-                        out.write('/');
-                    }
-                    hadSlash = false;
-                    out.write(c);
-                    // Only whitespace allowed before first comment:
-                    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
-                        seenFirstComment = true;
-                    }
-                    break;
-                }
-            }
-        }
-        if (hadSlash) {
-            out.write('/');
-        }
-        if (hadStar) {
-            out.write('*');
-        }
-        if (inString) {
-            throw new ImageReadException("Unterminated string at the end of file");
-        }
-        if (inComment) {
-            throw new ImageReadException("Unterminated comment at the end of file");
-        }
-        return out;
-    }
-
-    public static String[] tokenizeRow(final String row) {
-        final String[] tokens = row.split("[ \t]");
-        int numLiveTokens = 0;
-        for (final String token : tokens) {
-            if (token != null && !token.isEmpty()) {
-                ++numLiveTokens;
-            }
-        }
-        final String[] liveTokens = new String[numLiveTokens];
-        int next = 0;
-        for (final String token : tokens) {
-            if (token != null && !token.isEmpty()) {
-                liveTokens[next++] = token;
-            }
-        }
-        return liveTokens;
-    }
-
-    public static void unescapeString(final StringBuilder stringBuilder, final String string)
-            throws ImageReadException {
-        if (string.length() < 2) {
-            throw new ImageReadException("Parsing XPM file failed, "
-                    + "string is too short");
-        }
-        if (string.charAt(0) != '"'
-                || string.charAt(string.length() - 1) != '"') {
-            throw new ImageReadException("Parsing XPM file failed, "
-                    + "string not surrounded by '\"'");
-        }
-        boolean hadBackSlash = false;
-        for (int i = 1; i < (string.length() - 1); i++) {
-            final char c = string.charAt(i);
-            if (hadBackSlash) {
-                i = parseEscape(i, stringBuilder, string);
-                hadBackSlash = false;
-            } else {
-                if (c == '\\') {
-                    hadBackSlash = true;
-                } else if (c == '"') {
-                    throw new ImageReadException("Parsing XPM file failed, "
-                            + "extra '\"' found in string");
-                } else {
-                    stringBuilder.append(c);
-                }
-            }
-        }
-        if (hadBackSlash) {
-            throw new ImageReadException("Parsing XPM file failed, "
-                    + "unterminated escape sequence found in string");
-        }
-    }
-
     /**
      * Parses the hexadecimal-base escape-sequence found at index {@code i} of {@code string}.
      *
@@ -354,9 +44,9 @@ public class BasicCParser {
      * @since 1.0-alpha3
      */
     private static int appendHex(int i, final StringBuilder stringBuilder, final String string)
-        throws ImageReadException {
+        throws ImagingException {
         if (i + 2 >= string.length()) {
-            throw new ImageReadException(
+            throw new ImagingException(
                     "Parsing XPM file failed, "
                             + "hex constant in string too short");
         }
@@ -367,7 +57,7 @@ public class BasicCParser {
         try {
             constant = Integer.parseInt(hex1 + Character.toString(hex2), 16);
         } catch (final NumberFormatException nfe) {
-            throw new ImageReadException(
+            throw new ImagingException(
                     "Parsing XPM file failed, "
                             + "hex constant invalid", nfe);
         }
@@ -406,7 +96,6 @@ public class BasicCParser {
         return i;
     }
 
-
     /**
      * Parses the {@code i:th} escape-char in the input {@code string} and appends it to {@code stringBuilder}.
      *
@@ -419,7 +108,7 @@ public class BasicCParser {
      * @since 1.0-alpha3
      */
     private static int parseEscape(int i, final StringBuilder stringBuilder, final String string)
-        throws ImageReadException {
+        throws ImagingException {
         final char c = string.charAt(i);
         switch (c) {
         case '\\':
@@ -466,11 +155,316 @@ public class BasicCParser {
             stringBuilder.append((char) 0x0b);
             break;
         default:
-            throw new ImageReadException("Parsing XPM file failed, "
+            throw new ImagingException("Parsing XPM file failed, "
                     + "invalid escape sequence");
         }
         return i;
 
+    }
+
+    public static ByteArrayOutputStream preprocess(final InputStream is,
+            final StringBuilder firstComment, final Map<String, String> defines)
+            throws IOException, ImagingException {
+        boolean inSingleQuotes = false;
+        boolean inString = false;
+        boolean inComment = false;
+        boolean inDirective = false;
+        boolean hadSlash = false;
+        boolean hadStar = false;
+        boolean hadBackSlash = false;
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
+        boolean seenFirstComment = firstComment == null;
+        final StringBuilder directiveBuffer = new StringBuilder();
+        for (int c = is.read(); c != -1; c = is.read()) {
+            if (inComment) {
+                if (c == '*') {
+                    if (hadStar && !seenFirstComment) {
+                        firstComment.append('*');
+                    }
+                    hadStar = true;
+                } else if (c == '/') {
+                    if (hadStar) {
+                        hadStar = false;
+                        inComment = false;
+                        seenFirstComment = true;
+                    } else if (!seenFirstComment) {
+                        firstComment.append((char) c);
+                    }
+                } else {
+                    if (hadStar && !seenFirstComment) {
+                        firstComment.append('*');
+                    }
+                    hadStar = false;
+                    if (!seenFirstComment) {
+                        firstComment.append((char) c);
+                    }
+                }
+            } else if (inSingleQuotes) {
+                switch (c) {
+                case '\\':
+                    if (hadBackSlash) {
+                        out.write('\\');
+                        out.write('\\');
+                        hadBackSlash = false;
+                    } else {
+                        hadBackSlash = true;
+                    }
+                    break;
+                case '\'':
+                    if (hadBackSlash) {
+                        out.write('\\');
+                        hadBackSlash = false;
+                    } else {
+                        inSingleQuotes = false;
+                    }
+                    out.write('\'');
+                    break;
+                case '\r':
+                case '\n':
+                    throw new ImagingException("Unterminated single quote in file");
+                default:
+                    if (hadBackSlash) {
+                        out.write('\\');
+                        hadBackSlash = false;
+                    }
+                    out.write(c);
+                    break;
+                }
+            } else if (inString) {
+                switch (c) {
+                case '\\':
+                    if (hadBackSlash) {
+                        out.write('\\');
+                        out.write('\\');
+                        hadBackSlash = false;
+                    } else {
+                        hadBackSlash = true;
+                    }
+                    break;
+                case '"':
+                    if (hadBackSlash) {
+                        out.write('\\');
+                        hadBackSlash = false;
+                    } else {
+                        inString = false;
+                    }
+                    out.write('"');
+                    break;
+                case '\r':
+                case '\n':
+                    throw new ImagingException("Unterminated string in file");
+                default:
+                    if (hadBackSlash) {
+                        out.write('\\');
+                        hadBackSlash = false;
+                    }
+                    out.write(c);
+                    break;
+                }
+            } else if (inDirective) {
+                if (c == '\r' || c == '\n') {
+                    inDirective = false;
+                    final String[] tokens = tokenizeRow(directiveBuffer.toString());
+                    if (tokens.length < 2 || tokens.length > 3) {
+                        throw new ImagingException("Bad preprocessor directive");
+                    }
+                    if (!tokens[0].equals("define")) {
+                        throw new ImagingException("Invalid/unsupported "
+                                + "preprocessor directive '" + tokens[0] + "'");
+                    }
+                    defines.put(tokens[1], (tokens.length == 3) ? tokens[2]
+                            : null);
+                    directiveBuffer.setLength(0);
+                } else {
+                    directiveBuffer.append((char) c);
+                }
+            } else {
+                switch (c) {
+                case '/':
+                    if (hadSlash) {
+                        out.write('/');
+                    }
+                    hadSlash = true;
+                    break;
+                case '*':
+                    if (hadSlash) {
+                        inComment = true;
+                        hadSlash = false;
+                    } else {
+                        out.write(c);
+                    }
+                    break;
+                case '\'':
+                    if (hadSlash) {
+                        out.write('/');
+                    }
+                    hadSlash = false;
+                    out.write(c);
+                    inSingleQuotes = true;
+                    break;
+                case '"':
+                    if (hadSlash) {
+                        out.write('/');
+                    }
+                    hadSlash = false;
+                    out.write(c);
+                    inString = true;
+                    break;
+                case '#':
+                    if (defines == null) {
+                        throw new ImagingException("Unexpected preprocessor directive");
+                    }
+                    inDirective = true;
+                    break;
+                default:
+                    if (hadSlash) {
+                        out.write('/');
+                    }
+                    hadSlash = false;
+                    out.write(c);
+                    // Only whitespace allowed before first comment:
+                    if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+                        seenFirstComment = true;
+                    }
+                    break;
+                }
+            }
+        }
+        if (hadSlash) {
+            out.write('/');
+        }
+        if (hadStar) {
+            out.write('*');
+        }
+        if (inString) {
+            throw new ImagingException("Unterminated string at the end of file");
+        }
+        if (inComment) {
+            throw new ImagingException("Unterminated comment at the end of file");
+        }
+        return out;
+    }
+
+    public static String[] tokenizeRow(final String row) {
+        final String[] tokens = row.split("[ \t]");
+        int numLiveTokens = 0;
+        for (final String token : tokens) {
+            if (token != null && !token.isEmpty()) {
+                ++numLiveTokens;
+            }
+        }
+        final String[] liveTokens = Allocator.array(numLiveTokens, String[]::new, 24);
+        int next = 0;
+        for (final String token : tokens) {
+            if (token != null && !token.isEmpty()) {
+                liveTokens[next++] = token;
+            }
+        }
+        return liveTokens;
+    }
+
+    public static void unescapeString(final StringBuilder stringBuilder, final String string)
+            throws ImagingException {
+        if (string.length() < 2) {
+            throw new ImagingException("Parsing XPM file failed, "
+                    + "string is too short");
+        }
+        if (string.charAt(0) != '"'
+                || string.charAt(string.length() - 1) != '"') {
+            throw new ImagingException("Parsing XPM file failed, "
+                    + "string not surrounded by '\"'");
+        }
+        boolean hadBackSlash = false;
+        for (int i = 1; i < (string.length() - 1); i++) {
+            final char c = string.charAt(i);
+            if (hadBackSlash) {
+                i = parseEscape(i, stringBuilder, string);
+                hadBackSlash = false;
+            } else if (c == '\\') {
+                hadBackSlash = true;
+            } else if (c == '"') {
+                throw new ImagingException("Parsing XPM file failed, "
+                        + "extra '\"' found in string");
+            } else {
+                stringBuilder.append(c);
+            }
+        }
+        if (hadBackSlash) {
+            throw new ImagingException("Parsing XPM file failed, "
+                    + "unterminated escape sequence found in string");
+        }
+    }
+
+    private final PushbackInputStream is;
+
+    public BasicCParser(final ByteArrayInputStream is) {
+        this.is = new PushbackInputStream(is);
+    }
+
+
+    public String nextToken() throws IOException, ImagingException {
+        // I don't know how complete the C parsing in an XPM file
+        // is meant to be, this is just the very basics...
+
+        boolean inString = false;
+        boolean inIdentifier = false;
+        boolean hadBackSlash = false;
+        final StringBuilder token = new StringBuilder();
+        for (int c = is.read(); c != -1; c = is.read()) {
+            if (inString) {
+                switch (c) {
+                case '\\':
+                    token.append('\\');
+                    hadBackSlash = !hadBackSlash;
+                    break;
+                case '"':
+                    token.append('"');
+                    if (!hadBackSlash) {
+                        return token.toString();
+                    }
+                    hadBackSlash = false;
+                    break;
+                case '\r':
+                case '\n':
+                    throw new ImagingException(
+                            "Unterminated string in XPM file");
+                default:
+                    token.append((char) c);
+                    hadBackSlash = false;
+                    break;
+                }
+            } else if (inIdentifier) {
+                if (!Character.isLetterOrDigit(c) && (c != '_')) {
+                    is.unread(c);
+                    return token.toString();
+                }
+                token.append((char) c);
+            } else if (c == '"') {
+                token.append('"');
+                inString = true;
+            } else if (Character.isLetterOrDigit(c) || c == '_') {
+                token.append((char) c);
+                inIdentifier = true;
+            } else if (c == '{' || c == '}' || c == '[' || c == ']'
+                    || c == '*' || c == ';' || c == '=' || c == ',') {
+                token.append((char) c);
+                return token.toString();
+            } else if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+                // ignore
+            } else {
+                throw new ImagingException(
+                        "Unhandled/invalid character '" + ((char) c)
+                                + "' found in XPM file");
+            }
+        }
+
+        if (inIdentifier) {
+            return token.toString();
+        }
+        if (inString) {
+            throw new ImagingException("Unterminated string ends XMP file");
+        }
+        return null;
     }
 
 }

@@ -26,11 +26,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.logging.Logger;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.BinaryFunctions;
 
 public class IccTag {
 
+    static final int SHALLOW_SIZE = 40;
     private static final Logger LOGGER = Logger.getLogger(IccTag.class.getName());
 
     public final int signature;
@@ -50,41 +51,7 @@ public class IccTag {
         this.fIccTagType = fIccTagType;
     }
 
-    public void setData(final byte[] bytes) throws IOException {
-        data = bytes;
-
-        try (InputStream bis = new ByteArrayInputStream(bytes)) {
-            dataTypeSignature = BinaryFunctions.read4Bytes("data type signature", bis,
-                    "ICC: corrupt tag data", ByteOrder.BIG_ENDIAN);
-
-            itdt = getIccTagDataType(dataTypeSignature);
-            // if (itdt != null)
-            // {
-            // System.out.println("\t\t\t" + "itdt: " + itdt.name);
-            // }
-        }
-    }
-
-    private IccTagDataType getIccTagDataType(final int quad) {
-        for (final IccTagDataType iccTagDataType : IccTagDataTypes.values()) {
-            if (iccTagDataType.getSignature() == quad) {
-                return iccTagDataType;
-            }
-        }
-
-        return null;
-    }
-
-    public void dump(final String prefix) throws ImageReadException, IOException {
-        try (StringWriter sw = new StringWriter(); PrintWriter pw = new PrintWriter(sw)) {
-            dump(pw, prefix);
-            pw.flush();
-            sw.flush();
-            LOGGER.fine(sw.toString());
-        }
-    }
-
-    public void dump(final PrintWriter pw, final String prefix) throws ImageReadException,
+    public void dump(final PrintWriter pw, final String prefix) throws ImagingException,
             IOException {
         pw.println(prefix
                 + "tag signature: "
@@ -125,5 +92,39 @@ public class IccTag {
         pw.println("");
         pw.flush();
 
+    }
+
+    public void dump(final String prefix) throws ImagingException, IOException {
+        try (StringWriter sw = new StringWriter(); PrintWriter pw = new PrintWriter(sw)) {
+            dump(pw, prefix);
+            pw.flush();
+            sw.flush();
+            LOGGER.fine(sw.toString());
+        }
+    }
+
+    private IccTagDataType getIccTagDataType(final int quad) {
+        for (final IccTagDataType iccTagDataType : IccTagDataTypes.values()) {
+            if (iccTagDataType.getSignature() == quad) {
+                return iccTagDataType;
+            }
+        }
+
+        return null;
+    }
+
+    public void setData(final byte[] bytes) throws IOException {
+        data = bytes;
+
+        try (InputStream bis = new ByteArrayInputStream(bytes)) {
+            dataTypeSignature = BinaryFunctions.read4Bytes("data type signature", bis,
+                    "ICC: corrupt tag data", ByteOrder.BIG_ENDIAN);
+
+            itdt = getIccTagDataType(dataTypeSignature);
+            // if (itdt != null)
+            // {
+            // System.out.println("\t\t\t" + "itdt: " + itdt.name);
+            // }
+        }
     }
 }

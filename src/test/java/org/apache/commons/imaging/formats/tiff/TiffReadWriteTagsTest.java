@@ -22,10 +22,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
 import org.apache.commons.imaging.FormatCompliance;
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.common.RationalNumber;
-import org.apache.commons.imaging.common.bytesource.ByteSourceArray;
 import org.apache.commons.imaging.formats.tiff.constants.ExifTagConstants;
 import org.apache.commons.imaging.formats.tiff.constants.GeoTiffTagConstants;
 import org.apache.commons.imaging.formats.tiff.constants.GpsTagConstants;
@@ -39,7 +38,7 @@ import org.junit.jupiter.api.Test;
 public class TiffReadWriteTagsTest extends TiffBaseTest {
 
     @Test
-    public void testReadWriteTags() throws ImageWriteException, ImageReadException, IOException {
+    public void testReadWriteTags() throws ImagingException, ImagingException, IOException {
         final String description = "A pretty picture";
         final short page = 1;
         final RationalNumber twoThirds = new RationalNumber(2, 3);
@@ -75,7 +74,7 @@ public class TiffReadWriteTagsTest extends TiffBaseTest {
 
         final TiffReader reader = new TiffReader(true);
         final FormatCompliance formatCompliance = new FormatCompliance("");
-        final TiffContents contents = reader.readDirectories(new ByteSourceArray(tiff.toByteArray()), true, formatCompliance);
+        final TiffContents contents = reader.readDirectories(ByteSource.array(tiff.toByteArray()), true, formatCompliance);
         final TiffDirectory rootDir = contents.directories.get(0);
         assertEquals(description, rootDir.getSingleFieldValue(TiffTagConstants.TIFF_TAG_IMAGE_DESCRIPTION));
         assertEquals(page, rootDir.getFieldValue(TiffTagConstants.TIFF_TAG_PAGE_NUMBER, true)[0]);

@@ -32,13 +32,18 @@ public class FormatCompliance {
 
     private static final Logger LOGGER = Logger.getLogger(FormatCompliance.class.getName());
 
+    public static FormatCompliance getDefault() {
+        return new FormatCompliance("ignore", false);
+    }
+
     private final boolean failOnError;
     private final String description;
+
     private final List<String> comments = new ArrayList<>();
 
     public FormatCompliance(final String description) {
         this.description = description;
-        failOnError = false;
+        this.failOnError = false;
     }
 
     public FormatCompliance(final String description, final boolean failOnError) {
@@ -46,29 +51,81 @@ public class FormatCompliance {
         this.failOnError = failOnError;
     }
 
-    public static FormatCompliance getDefault() {
-        return new FormatCompliance("ignore", false);
-    }
-
-    public void addComment(final String comment) throws ImageReadException {
+    public void addComment(final String comment) throws ImagingException {
         comments.add(comment);
         if (failOnError) {
-            throw new ImageReadException(comment);
+            throw new ImagingException(comment);
         }
     }
 
-    public void addComment(final String comment, final int value) throws ImageReadException {
+    public void addComment(final String comment, final int value) throws ImagingException {
         addComment(comment + ": " + getValueDescription(value));
     }
 
-    @Override
-    public String toString() {
-        final StringWriter sw = new StringWriter();
-        final PrintWriter pw = new PrintWriter(sw);
+    public boolean checkBounds(final String name, final int min, final int max, final int actual)
+            throws ImagingException {
+        if ((actual < min) || (actual > max)) {
+            addComment(name + ": " + "bounds check: " + min + " <= " + actual
+                    + " <= " + max + ": false");
+            return false;
+        }
 
-        dump(pw);
+        return true;
+    }
 
-        return sw.getBuffer().toString();
+    public boolean compare(final String name, final int valid, final int actual)
+            throws ImagingException {
+        return compare(name, new int[] { valid, }, actual);
+    }
+
+    public boolean compare(final String name, final int[] valid, final int actual)
+            throws ImagingException {
+        for (final int element : valid) {
+            if (actual == element) {
+                return true;
+            }
+        }
+
+        final StringBuilder result = new StringBuilder(43);
+        result.append(name);
+        result.append(": Unexpected value: (valid: ");
+        if (valid.length > 1) {
+            result.append('{');
+        }
+        for (int i = 0; i < valid.length; i++) {
+            if (i > 0) {
+                result.append(", ");
+            }
+            result.append(getValueDescription(valid[i]));
+        }
+        if (valid.length > 1) {
+            result.append('}');
+        }
+        result.append(", actual: ").append(getValueDescription(actual)).append(")");
+        addComment(result.toString());
+        return false;
+    }
+
+    public boolean compareBytes(final String name, final byte[] expected, final byte[] actual)
+            throws ImagingException {
+        if (expected.length != actual.length) {
+            addComment(name + ": " + "Unexpected length: (expected: "
+                    + expected.length + ", actual: " + actual.length + ")");
+            return false;
+        }
+        for (int i = 0; i < expected.length; i++) {
+            // System.out.println("expected: "
+            // + getValueDescription(expected[i]) + ", actual: "
+            // + getValueDescription(actual[i]) + ")");
+            if (expected[i] != actual[i]) {
+                addComment(name + ": " + "Unexpected value: (expected: "
+                        + getValueDescription(expected[i]) + ", actual: "
+                        + getValueDescription(actual[i]) + ")");
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void dump() {
@@ -100,69 +157,13 @@ public class FormatCompliance {
         return value + " (" + Integer.toHexString(value) + ")";
     }
 
-    public boolean compareBytes(final String name, final byte[] expected, final byte[] actual)
-            throws ImageReadException {
-        if (expected.length != actual.length) {
-            addComment(name + ": " + "Unexpected length: (expected: "
-                    + expected.length + ", actual: " + actual.length + ")");
-            return false;
-        }
-        for (int i = 0; i < expected.length; i++) {
-            // System.out.println("expected: "
-            // + getValueDescription(expected[i]) + ", actual: "
-            // + getValueDescription(actual[i]) + ")");
-            if (expected[i] != actual[i]) {
-                addComment(name + ": " + "Unexpected value: (expected: "
-                        + getValueDescription(expected[i]) + ", actual: "
-                        + getValueDescription(actual[i]) + ")");
-                return false;
-            }
-        }
+    @Override
+    public String toString() {
+        final StringWriter sw = new StringWriter();
+        final PrintWriter pw = new PrintWriter(sw);
 
-        return true;
-    }
+        dump(pw);
 
-    public boolean checkBounds(final String name, final int min, final int max, final int actual)
-            throws ImageReadException {
-        if ((actual < min) || (actual > max)) {
-            addComment(name + ": " + "bounds check: " + min + " <= " + actual
-                    + " <= " + max + ": false");
-            return false;
-        }
-
-        return true;
-    }
-
-    public boolean compare(final String name, final int valid, final int actual)
-            throws ImageReadException {
-        return compare(name, new int[] { valid, }, actual);
-    }
-
-    public boolean compare(final String name, final int[] valid, final int actual)
-            throws ImageReadException {
-        for (final int element : valid) {
-            if (actual == element) {
-                return true;
-            }
-        }
-
-        final StringBuilder result = new StringBuilder(43);
-        result.append(name);
-        result.append(": Unexpected value: (valid: ");
-        if (valid.length > 1) {
-            result.append('{');
-        }
-        for (int i = 0; i < valid.length; i++) {
-            if (i > 0) {
-                result.append(", ");
-            }
-            result.append(getValueDescription(valid[i]));
-        }
-        if (valid.length > 1) {
-            result.append('}');
-        }
-        result.append(", actual: ").append(getValueDescription(actual)).append(")");
-        addComment(result.toString());
-        return false;
+        return sw.getBuffer().toString();
     }
 }

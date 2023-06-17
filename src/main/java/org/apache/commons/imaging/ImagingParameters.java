@@ -33,19 +33,19 @@ public class ImagingParameters<E extends ImagingParameters<E>> {
      * Whether to throw an exception when any issue occurs during reading
      * or writing a file format. Default is {@code false}.
      */
-    private boolean strict = false;
+    private boolean strict;
 
     /**
      * An optional file name, used for the description of input streams
      * where a file name would be hard (or not possible) to be identified.
      * Default is {@code null}.
      */
-    private String fileName = null;
+    private String fileName;
 
     /**
      * Factory to create {@code BufferedImage}s. Default is {@code null}.
      */
-    private BufferedImageFactory bufferedImageFactory = null;
+    private BufferedImageFactory bufferedImageFactory;
 
     /**
      * <p>Parameter key. Used in write operations to indicate the desired pixel

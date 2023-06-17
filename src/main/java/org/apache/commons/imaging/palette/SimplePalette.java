@@ -16,11 +16,24 @@
  */
 package org.apache.commons.imaging.palette;
 
+import java.util.Objects;
+
 public class SimplePalette implements Palette {
+
     private final int[] palette;
 
+    /**
+     * Constructs a new instance.
+     *
+     * @param palette palette to copy and store.
+     */
     public SimplePalette(final int[] palette) {
-        this.palette = palette;
+        this.palette = Objects.requireNonNull(palette, "palette").clone();
+    }
+
+    @Override
+    public int getEntry(final int index) {
+        return palette[index];
     }
 
     @Override
@@ -30,13 +43,7 @@ public class SimplePalette implements Palette {
                 return i;
             }
         }
-
         return -1;
-    }
-
-    @Override
-    public int getEntry(final int index) {
-        return palette[index];
     }
 
     @Override

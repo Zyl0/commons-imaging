@@ -22,7 +22,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageBuilder;
 import org.apache.commons.imaging.formats.tiff.photometricinterpreters.PhotometricInterpreter;
 
@@ -161,11 +161,63 @@ public class PhotometricInterpreterFloat extends PhotometricInterpreter {
         singleValuePaletteEntries.sort(comparator);
     }
 
+    /**
+     * Gets the maximum value found while rendering the image
+     *
+     * @return if data was processed, a valid value; otherwise, Negative
+     * Infinity
+     */
+    public float getMaxFound() {
+        return maxFound;
+    }
+
+    /**
+     * Gets the coordinates (x,y) at which the maximum value was identified
+     * during processing
+     *
+     * @return a valid array of length 2.
+     */
+    public int[] getMaxXY() {
+        return new int[]{xMax, yMax};
+    }
+
+    /**
+     * Get the mean of the values found while processing
+     *
+     * @return if data was processed, a valid mean value; otherwise, a zero.
+     */
+    public float getMeanFound() {
+        if (nFound == 0) {
+            return 0;
+        }
+        return (float) (sumFound / nFound);
+    }
+
+    /**
+     * Gets the minimum value found while rendering the image
+     *
+     * @return if data was processed, a valid value; otherwise, Positive
+     * Infinity
+     */
+    public float getMinFound() {
+        return minFound;
+    }
+
+    /**
+     * Gets the coordinates (x,y) at which the minimum value was identified
+     * during processing
+     *
+     * @return a valid array of length 2.
+     */
+    public int[] getMinXY() {
+        return new int[]{xMin, yMin};
+    }
+
     @Override
     public void interpretPixel(
         final ImageBuilder imageBuilder,
         final int[] samples, final int x, final int y)
-        throws ImageReadException, IOException {
+        throws ImagingException, IOException {
 
         final float f = Float.intBitsToFloat(samples[0]);
         // in the event of NaN, do not store entry in the image builder.
@@ -212,58 +264,6 @@ public class PhotometricInterpreterFloat extends PhotometricInterpreter {
                 break;
             }
         }
-    }
-
-    /**
-     * Gets the minimum value found while rendering the image
-     *
-     * @return if data was processed, a valid value; otherwise, Positive
-     * Infinity
-     */
-    public float getMinFound() {
-        return minFound;
-    }
-
-    /**
-     * Gets the coordinates (x,y) at which the maximum value was identified
-     * during processing
-     *
-     * @return a valid array of length 2.
-     */
-    public int[] getMaxXY() {
-        return new int[]{xMax, yMax};
-    }
-
-    /**
-     * Gets the maximum value found while rendering the image
-     *
-     * @return if data was processed, a valid value; otherwise, Negative
-     * Infinity
-     */
-    public float getMaxFound() {
-        return maxFound;
-    }
-
-    /**
-     * Gets the coordinates (x,y) at which the minimum value was identified
-     * during processing
-     *
-     * @return a valid array of length 2.
-     */
-    public int[] getMinXY() {
-        return new int[]{xMin, yMin};
-    }
-
-    /**
-     * Get the mean of the values found while processing
-     *
-     * @return if data was processed, a valid mean value; otherwise, a zero.
-     */
-    public float getMeanFound() {
-        if (nFound == 0) {
-            return 0;
-        }
-        return (float) (sumFound / nFound);
     }
 
     /**

@@ -22,10 +22,21 @@ import org.apache.commons.imaging.common.BinaryOutputStream;
 class RleWriter {
     private final boolean isCompressed;
     private int previousByte = -1;
-    private int repeatCount = 0;
+    private int repeatCount;
 
     RleWriter(final boolean isCompressed) {
         this.isCompressed = isCompressed;
+    }
+
+    void flush(final BinaryOutputStream bos) throws IOException {
+        if (repeatCount > 0) {
+            if (repeatCount == 1 && (previousByte & 0xc0) != 0xc0) {
+                bos.write(previousByte);
+            } else {
+                bos.write(0xc0 | repeatCount);
+                bos.write(previousByte);
+            }
+        }
     }
 
     void write(final BinaryOutputStream bos, final byte[] samples)
@@ -51,17 +62,6 @@ class RleWriter {
             }
         } else {
             bos.write(samples);
-        }
-    }
-
-    void flush(final BinaryOutputStream bos) throws IOException {
-        if (repeatCount > 0) {
-            if (repeatCount == 1 && (previousByte & 0xc0) != 0xc0) {
-                bos.write(previousByte);
-            } else {
-                bos.write(0xc0 | repeatCount);
-                bos.write(previousByte);
-            }
         }
     }
 }

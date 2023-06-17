@@ -25,7 +25,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.formats.jpeg.JpegConstants;
 
 public class App2Segment extends AppnSegment implements Comparable<App2Segment> {
@@ -34,12 +34,12 @@ public class App2Segment extends AppnSegment implements Comparable<App2Segment> 
     public final int numMarkers;
 
     public App2Segment(final int marker, final byte[] segmentData)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         this(marker, segmentData.length, new ByteArrayInputStream(segmentData));
     }
 
     public App2Segment(final int marker, int markerLength, final InputStream is2)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         super(marker, markerLength, is2);
 
         if (startsWith(getSegmentData(),
@@ -65,6 +65,11 @@ public class App2Segment extends AppnSegment implements Comparable<App2Segment> 
     }
 
     @Override
+    public int compareTo(final App2Segment other) {
+        return curMarker - other.curMarker;
+    }
+
+    @Override
     public boolean equals(final Object obj) {
         if (obj instanceof App2Segment) {
             final App2Segment other = (App2Segment) obj;
@@ -73,20 +78,15 @@ public class App2Segment extends AppnSegment implements Comparable<App2Segment> 
         return false;
     }
 
-    @Override
-    public int hashCode() {
-        return curMarker;
-    }
-
-    @Override
-    public int compareTo(final App2Segment other) {
-        return curMarker - other.curMarker;
-    }
-
     /**
      * @return the iccBytes
      */
     public byte[] getIccBytes() {
         return iccBytes != null ? iccBytes.clone() : null;
+    }
+
+    @Override
+    public int hashCode() {
+        return curMarker;
     }
 }

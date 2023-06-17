@@ -17,9 +17,13 @@
 
 package org.apache.commons.imaging.formats.jpeg.exif;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
+import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.stream.Stream;
+
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.JpegImagingParameters;
@@ -28,31 +32,17 @@ import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.List;
-import java.util.stream.Stream;
-
 public abstract class SpecificExifTagTest extends ExifBaseTest {
 
     public static Stream<File> data() throws Exception {
         return getImagesWithExifData().stream();
     }
 
-    @ParameterizedTest
-    @MethodSource("data")
-    public void testAllImages(final File imageFile) throws Exception {
-        if (imageFile.getParentFile().getName().toLowerCase().equals("@broken")) {
-            return;
-        }
-        checkImage(imageFile);
-    }
-
     protected abstract void checkField(File imageFile, TiffField field)
-            throws IOException, ImageReadException, ImageWriteException;
+            throws IOException, ImagingException, ImagingException;
 
     private void checkImage(final File imageFile) throws IOException,
-            ImageReadException, ImageWriteException {
+            ImagingException, ImagingException {
         // Debug.debug("imageFile", imageFile.getAbsoluteFile());
 
         final JpegImagingParameters params = new JpegImagingParameters();
@@ -75,6 +65,15 @@ public abstract class SpecificExifTagTest extends ExifBaseTest {
             checkField(imageFile, field);
         }
 
+    }
+
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testAllImages(final File imageFile) throws Exception {
+        if (imageFile.getParentFile().getName().toLowerCase().equals("@broken")) {
+            return;
+        }
+        checkImage(imageFile);
     }
 
 }

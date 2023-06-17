@@ -25,9 +25,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
 import org.apache.commons.imaging.Imaging;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.common.ImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.JpegImageMetadata;
 import org.apache.commons.imaging.formats.jpeg.iptc.JpegIptcRewriter;
@@ -48,37 +47,28 @@ public class MicrosoftTagTest extends ExifBaseTest {
     private static final String SUBJECT = "subject";
     private static final String TITLE = "title";
 
-    @Test
-    public void testWrite() throws Exception {
-        final BufferedImage image = new BufferedImage(10, 10, BufferedImage.TYPE_INT_ARGB);
-        final TiffOutputSet exifSet = new TiffOutputSet();
-        final TiffOutputDirectory root = exifSet.getOrCreateRootDirectory();
-        root.add(MicrosoftTagConstants.EXIF_TAG_XPAUTHOR, AUTHOR);
-        root.add(MicrosoftTagConstants.EXIF_TAG_XPCOMMENT, COMMENT);
-        root.add(MicrosoftTagConstants.EXIF_TAG_XPSUBJECT, SUBJECT);
-        root.add(MicrosoftTagConstants.EXIF_TAG_XPTITLE, TITLE);
-        final TiffImagingParameters params = new TiffImagingParameters();
-        params.setOutputSet(exifSet);
-        final TiffImageParser tiffImageParser = new TiffImageParser();
-        final byte[] bytes;
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            tiffImageParser.writeImage(image, baos, params);
-            bytes = baos.toByteArray();
+    private void checkFields(final byte[] file) throws Exception {
+        final TiffImageMetadata metadata = toTiffMetadata(Imaging.getMetadata(file));
+
+        // field values may be duplicated between directories, we have to check all
+        final List<Object> authorValues = new ArrayList<>();
+        final List<Object> commentValues = new ArrayList<>();
+        final List<Object> subjectValues = new ArrayList<>();
+        final List<Object> titleValues = new ArrayList<>();
+        for (final TiffDirectory d : metadata.contents.directories) {
+            titleValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPTITLE, false));
+            authorValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPAUTHOR, false));
+            commentValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPCOMMENT, false));
+            subjectValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPSUBJECT, false));
         }
-        checkFields(bytes);
+
+        assertTrue(authorValues.contains(AUTHOR));
+        assertTrue(commentValues.contains(COMMENT));
+        assertTrue(subjectValues.contains(SUBJECT));
+        assertTrue(titleValues.contains(TITLE));
     }
 
-    private TiffImageMetadata toTiffMetadata(final ImageMetadata metadata) throws Exception {
-        if (metadata instanceof JpegImageMetadata) {
-            return ((JpegImageMetadata)metadata).getExif();
-        }
-        if (metadata instanceof TiffImageMetadata) {
-            return ((TiffImageMetadata)metadata);
-        }
-        throw new Exception("bad metadata format");
-    }
-
-    private byte[] cleanImage(final File imageWithExif) throws ImageReadException, ImageWriteException, IOException {
+    private byte[] cleanImage(final File imageWithExif) throws ImagingException, ImagingException, IOException {
         // Windows doesn't show XP tags if same-meaning tags exist in IPTC or XMP. Remove them:
         final ByteArrayOutputStream noXmp = new ByteArrayOutputStream();
         new JpegXmpRewriter().removeXmpXml(imageWithExif, noXmp);
@@ -118,24 +108,33 @@ public class MicrosoftTagTest extends ExifBaseTest {
         checkFields(baos.toByteArray());
     }
 
-    private void checkFields(final byte[] file) throws Exception {
-        final TiffImageMetadata metadata = toTiffMetadata(Imaging.getMetadata(file));
-
-        // field values may be duplicated between directories, we have to check all
-        final List<Object> authorValues = new ArrayList<>();
-        final List<Object> commentValues = new ArrayList<>();
-        final List<Object> subjectValues = new ArrayList<>();
-        final List<Object> titleValues = new ArrayList<>();
-        for (final TiffDirectory d : metadata.contents.directories) {
-            titleValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPTITLE, false));
-            authorValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPAUTHOR, false));
-            commentValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPCOMMENT, false));
-            subjectValues.add(d.getFieldValue(MicrosoftTagConstants.EXIF_TAG_XPSUBJECT, false));
+    @Test
+    public void testWrite() throws Exception {
+        final BufferedImage image = new BufferedImage(10, 10, BufferedImage.TYPE_INT_ARGB);
+        final TiffOutputSet exifSet = new TiffOutputSet();
+        final TiffOutputDirectory root = exifSet.getOrCreateRootDirectory();
+        root.add(MicrosoftTagConstants.EXIF_TAG_XPAUTHOR, AUTHOR);
+        root.add(MicrosoftTagConstants.EXIF_TAG_XPCOMMENT, COMMENT);
+        root.add(MicrosoftTagConstants.EXIF_TAG_XPSUBJECT, SUBJECT);
+        root.add(MicrosoftTagConstants.EXIF_TAG_XPTITLE, TITLE);
+        final TiffImagingParameters params = new TiffImagingParameters();
+        params.setOutputSet(exifSet);
+        final TiffImageParser tiffImageParser = new TiffImageParser();
+        final byte[] bytes;
+        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+            tiffImageParser.writeImage(image, baos, params);
+            bytes = baos.toByteArray();
         }
+        checkFields(bytes);
+    }
 
-        assertTrue(authorValues.contains(AUTHOR));
-        assertTrue(commentValues.contains(COMMENT));
-        assertTrue(subjectValues.contains(SUBJECT));
-        assertTrue(titleValues.contains(TITLE));
+    private TiffImageMetadata toTiffMetadata(final ImageMetadata metadata) throws Exception {
+        if (metadata instanceof JpegImageMetadata) {
+            return ((JpegImageMetadata)metadata).getExif();
+        }
+        if (metadata instanceof TiffImageMetadata) {
+            return ((TiffImageMetadata)metadata);
+        }
+        throw new Exception("bad metadata format");
     }
 }

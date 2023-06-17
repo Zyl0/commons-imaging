@@ -19,9 +19,11 @@ package org.apache.commons.imaging.palette;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 
 public class QuantizedPalette implements Palette {
+
     private final int precision;
     private final List<ColorSpaceSubset> subsets;
     private final ColorSpaceSubset[] straight;
@@ -30,10 +32,10 @@ public class QuantizedPalette implements Palette {
         this.subsets = subsets == null ? Collections.emptyList() : Collections.unmodifiableList(subsets);
         this.precision = precision;
 
-        straight = new ColorSpaceSubset[1 << (precision * 3)];
+        straight = Allocator.array(1 << (precision * 3), ColorSpaceSubset[]::new, ColorSpaceSubset.SHALLOW_SIZE);
 
         for (int i = 0; i < this.subsets.size(); i++) {
-            final ColorSpaceSubset subset = subsets.get(i);
+            final ColorSpaceSubset subset = this.subsets.get(i);
             subset.setIndex(i);
 
             for (int u = subset.mins[0]; u <= subset.maxs[0]; u++) {
@@ -50,7 +52,13 @@ public class QuantizedPalette implements Palette {
     }
 
     @Override
-    public int getPaletteIndex(final int rgb) throws ImageWriteException {
+    public int getEntry(final int index) {
+        final ColorSpaceSubset subset = subsets.get(index);
+        return subset.rgb;
+    }
+
+    @Override
+    public int getPaletteIndex(final int rgb) throws ImagingException {
         final int precisionMask = (1 << precision) - 1;
 
         final int index = ((rgb >> (24 - 3 * precision)) & (precisionMask << (precision << 1)))
@@ -58,12 +66,6 @@ public class QuantizedPalette implements Palette {
                 | ((rgb >> (8 - precision)) & (precisionMask));
 
         return straight[index].getIndex();
-    }
-
-    @Override
-    public int getEntry(final int index) {
-        final ColorSpaceSubset subset = subsets.get(index);
-        return subset.rgb;
     }
 
     @Override

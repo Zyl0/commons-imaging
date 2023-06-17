@@ -18,8 +18,8 @@ package org.apache.commons.imaging.formats.tiff.photometricinterpreters.floating
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 import java.awt.Color;
 
@@ -34,15 +34,37 @@ public class PaletteEntryForRangeTest {
     }
 
     /**
-     * Test of isCovered method, of class PaletteEntryForRange.
+     * Test of coversSingleEntry method, of class PaletteEntryForRange.
      */
     @Test
-    public void testIsCovered() {
+    public void testCoversSingleEntry() {
         final Color c0 = new Color(0xff0000ff);
         final Color c1 = new Color(0xff00ff00);
         final PaletteEntryForRange instance = new PaletteEntryForRange(0.0f, 1.0f, c0, c1);
-        assertTrue(instance.isCovered(0.0f), "Zero value must be covered");
-        assertFalse(instance.isCovered(1.0f), "Value 1.0 must not be covered");
+        assertFalse(instance.coversSingleEntry());
+    }
+
+    @Test
+    public void testFaultyConstructors() {
+        final Color c0 = new Color(0xff0000ff);
+        final Color c1 = new Color(0xff00ff00);
+
+        // test the two-color variations -----------------------
+        assertThrows(IllegalArgumentException.class, () -> new PaletteEntryForRange(0.0f, 0.0f, c0, c1),
+                "Constructor failed to detect invalid range");
+
+        assertThrows(IllegalArgumentException.class, () -> new PaletteEntryForRange(0.0f, 1.0f, null, c1),
+                "Constructor failed to detect null color");
+
+        assertThrows(IllegalArgumentException.class, () -> new PaletteEntryForRange(0.0f, 1.0f, c0, null),
+                "Constructor failed to detect invalid color");
+
+        // test the one-color variations -----------------------
+        assertThrows(IllegalArgumentException.class, () -> new PaletteEntryForRange(0.0f, 0.0f, c0),
+                "Constructor failed to detect invalid range");
+
+        assertThrows(IllegalArgumentException.class, () -> new PaletteEntryForRange(0.0f, 1.0f, null),
+                "Constructor failed to detect null color");
     }
 
     /**
@@ -77,17 +99,6 @@ public class PaletteEntryForRangeTest {
     }
 
     /**
-     * Test of coversSingleEntry method, of class PaletteEntryForRange.
-     */
-    @Test
-    public void testCoversSingleEntry() {
-        final Color c0 = new Color(0xff0000ff);
-        final Color c1 = new Color(0xff00ff00);
-        final PaletteEntryForRange instance = new PaletteEntryForRange(0.0f, 1.0f, c0, c1);
-        assertFalse(instance.coversSingleEntry());
-    }
-
-    /**
      * Test of getLowerBound method, of class PaletteEntryForRange.
      */
     @Test
@@ -109,46 +120,15 @@ public class PaletteEntryForRangeTest {
         assertEquals(1.0f, instance.getUpperBound());
     }
 
+    /**
+     * Test of isCovered method, of class PaletteEntryForRange.
+     */
     @Test
-    public void testFaultyConstructors() {
+    public void testIsCovered() {
         final Color c0 = new Color(0xff0000ff);
         final Color c1 = new Color(0xff00ff00);
-        PaletteEntryForRange pTest;
-
-        // test the two-color variations -----------------------
-        try {
-            pTest = new PaletteEntryForRange(0.0f, 0.0f, c0, c1);
-            fail("Constructor failed to detect invalid range");
-        } catch (final IllegalArgumentException iex) {
-            // successful test
-        }
-
-        try {
-            pTest = new PaletteEntryForRange(0.0f, 1.0f, null, c1);
-            fail("Constructor failed to detect null color");
-        } catch (final IllegalArgumentException iex) {
-            // successful test
-        }
-        try {
-            pTest = new PaletteEntryForRange(0.0f, 1.0f, c0, null);
-            fail("Constructor failed to detect invalid color");
-        } catch (final IllegalArgumentException iex) {
-            // successful test
-        }
-
-        // test the one-color variations -----------------------
-        try {
-            pTest = new PaletteEntryForRange(0.0f, 0.0f, c0);
-            fail("Constructor failed to detect invalid range");
-        } catch (final IllegalArgumentException iex) {
-            // successful test
-        }
-
-        try {
-            pTest = new PaletteEntryForRange(0.0f, 1.0f, null);
-            fail("Constructor failed to detect null color");
-        } catch (final IllegalArgumentException iex) {
-            // successful test
-        }
+        final PaletteEntryForRange instance = new PaletteEntryForRange(0.0f, 1.0f, c0, c1);
+        assertTrue(instance.isCovered(0.0f), "Zero value must be covered");
+        assertFalse(instance.isCovered(1.0f), "Value 1.0 must not be covered");
     }
 }

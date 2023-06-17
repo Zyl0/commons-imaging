@@ -25,7 +25,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,118 +32,21 @@ import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
 import org.apache.commons.imaging.ImageInfo;
 import org.apache.commons.imaging.ImageParser;
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.bytesource.ByteSource;
 import org.apache.commons.imaging.common.BinaryOutputStream;
 import org.apache.commons.imaging.common.ImageMetadata;
-import org.apache.commons.imaging.common.bytesource.ByteSource;
 
 public class IcnsImageParser extends ImageParser<IcnsImagingParameters> {
-    static final int ICNS_MAGIC = IcnsType.typeAsInt("icns");
-    private static final String DEFAULT_EXTENSION = ImageFormats.ICNS.getDefaultExtension();
-    private static final String[] ACCEPTED_EXTENSIONS = ImageFormats.ICNS.getExtensions();
+    private static class IcnsContents {
+        public final IcnsHeader icnsHeader;
+        public final IcnsElement[] icnsElements;
 
-    public IcnsImageParser() {
-        super.setByteOrder(ByteOrder.BIG_ENDIAN);
-    }
-
-    @Override
-    public IcnsImagingParameters getDefaultParameters() {
-        return new IcnsImagingParameters();
-    }
-
-    @Override
-    public String getName() {
-        return "Apple Icon Image";
-    }
-
-    @Override
-    public String getDefaultExtension() {
-        return DEFAULT_EXTENSION;
-    }
-
-    @Override
-    protected String[] getAcceptedExtensions() {
-        return ACCEPTED_EXTENSIONS;
-    }
-
-    @Override
-    protected ImageFormat[] getAcceptedTypes() {
-        return new ImageFormat[] { ImageFormats.ICNS };
-    }
-
-    // FIXME should throw UOE
-    @Override
-    public ImageMetadata getMetadata(final ByteSource byteSource, final IcnsImagingParameters params)
-            throws ImageReadException, IOException {
-        return null;
-    }
-
-    @Override
-    public ImageInfo getImageInfo(final ByteSource byteSource, final IcnsImagingParameters params)
-            throws ImageReadException, IOException {
-        final IcnsContents contents = readImage(byteSource);
-        final List<BufferedImage> images = IcnsDecoder.decodeAllImages(contents.icnsElements);
-        if (images.isEmpty()) {
-            throw new ImageReadException("No icons in ICNS file");
-        }
-        final BufferedImage image0 = images.get(0);
-        return new ImageInfo("Icns", 32, new ArrayList<>(),
-                ImageFormats.ICNS, "ICNS Apple Icon Image",
-                image0.getHeight(), "image/x-icns", images.size(), 0, 0, 0, 0,
-                image0.getWidth(), false, true, false,
-                ImageInfo.ColorType.RGB,
-                ImageInfo.CompressionAlgorithm.UNKNOWN);
-    }
-
-    @Override
-    public Dimension getImageSize(final ByteSource byteSource, final IcnsImagingParameters params)
-            throws ImageReadException, IOException {
-        final IcnsContents contents = readImage(byteSource);
-        final List<BufferedImage> images = IcnsDecoder.decodeAllImages(contents.icnsElements);
-        if (images.isEmpty()) {
-            throw new ImageReadException("No icons in ICNS file");
-        }
-        final BufferedImage image0 = images.get(0);
-        return new Dimension(image0.getWidth(), image0.getHeight());
-    }
-
-    @Override
-    public byte[] getICCProfileBytes(final ByteSource byteSource, final IcnsImagingParameters params)
-            throws ImageReadException, IOException {
-        return null;
-    }
-
-    private static class IcnsHeader {
-        public final int magic; // Magic literal (4 bytes), always "icns"
-        public final int fileSize; // Length of file (4 bytes), in bytes.
-
-        IcnsHeader(final int magic, final int fileSize) {
-            this.magic = magic;
-            this.fileSize = fileSize;
-        }
-
-        public void dump(final PrintWriter pw) {
-            pw.println("IcnsHeader");
-            pw.println("Magic: 0x" + Integer.toHexString(magic) + " ("
-                    + IcnsType.describeType(magic) + ")");
-            pw.println("FileSize: " + fileSize);
-            pw.println("");
+        IcnsContents(final IcnsHeader icnsHeader, final IcnsElement[] icnsElements) {
+            this.icnsHeader = icnsHeader;
+            this.icnsElements = icnsElements;
         }
     }
-
-    private IcnsHeader readIcnsHeader(final InputStream is)
-            throws ImageReadException, IOException {
-        final int magic = read4Bytes("Magic", is, "Not a Valid ICNS File", getByteOrder());
-        final int fileSize = read4Bytes("FileSize", is, "Not a Valid ICNS File", getByteOrder());
-
-        if (magic != ICNS_MAGIC) {
-            throw new ImageReadException("Not a Valid ICNS File: " + "magic is 0x" + Integer.toHexString(magic));
-        }
-
-        return new IcnsHeader(magic, fileSize);
-    }
-
     static class IcnsElement {
         static final IcnsElement[] EMPTY_ARRAY = {};
         public final int type;
@@ -172,6 +74,125 @@ public class IcnsImageParser extends ImageParser<IcnsImagingParameters> {
             pw.println("");
         }
     }
+    private static class IcnsHeader {
+        public final int magic; // Magic literal (4 bytes), always "icns"
+        public final int fileSize; // Length of file (4 bytes), in bytes.
+
+        IcnsHeader(final int magic, final int fileSize) {
+            this.magic = magic;
+            this.fileSize = fileSize;
+        }
+
+        public void dump(final PrintWriter pw) {
+            pw.println("IcnsHeader");
+            pw.println("Magic: 0x" + Integer.toHexString(magic) + " ("
+                    + IcnsType.describeType(magic) + ")");
+            pw.println("FileSize: " + fileSize);
+            pw.println("");
+        }
+    }
+
+    static final int ICNS_MAGIC = IcnsType.typeAsInt("icns");
+
+    private static final String DEFAULT_EXTENSION = ImageFormats.ICNS.getDefaultExtension();
+
+    private static final String[] ACCEPTED_EXTENSIONS = ImageFormats.ICNS.getExtensions();
+
+    @Override
+    public boolean dumpImageFile(final PrintWriter pw, final ByteSource byteSource)
+            throws ImagingException, IOException {
+        final IcnsContents icnsContents = readImage(byteSource);
+        icnsContents.icnsHeader.dump(pw);
+        for (final IcnsElement icnsElement : icnsContents.icnsElements) {
+            icnsElement.dump(pw);
+        }
+        return true;
+    }
+
+    @Override
+    protected String[] getAcceptedExtensions() {
+        return ACCEPTED_EXTENSIONS;
+    }
+
+    @Override
+    protected ImageFormat[] getAcceptedTypes() {
+        return new ImageFormat[] { ImageFormats.ICNS };
+    }
+
+    @Override
+    public List<BufferedImage> getAllBufferedImages(final ByteSource byteSource)
+            throws ImagingException, IOException {
+        final IcnsContents icnsContents = readImage(byteSource);
+        return IcnsDecoder.decodeAllImages(icnsContents.icnsElements);
+    }
+
+    @Override
+    public final BufferedImage getBufferedImage(final ByteSource byteSource,
+            final IcnsImagingParameters params) throws ImagingException, IOException {
+        final IcnsContents icnsContents = readImage(byteSource);
+        final List<BufferedImage> result = IcnsDecoder.decodeAllImages(icnsContents.icnsElements);
+        if (!result.isEmpty()) {
+            return result.get(0);
+        }
+        throw new ImagingException("No icons in ICNS file");
+    }
+
+    @Override
+    public String getDefaultExtension() {
+        return DEFAULT_EXTENSION;
+    }
+
+    @Override
+    public IcnsImagingParameters getDefaultParameters() {
+        return new IcnsImagingParameters();
+    }
+
+    @Override
+    public byte[] getICCProfileBytes(final ByteSource byteSource, final IcnsImagingParameters params)
+            throws ImagingException, IOException {
+        return null;
+    }
+
+    @Override
+    public ImageInfo getImageInfo(final ByteSource byteSource, final IcnsImagingParameters params)
+            throws ImagingException, IOException {
+        final IcnsContents contents = readImage(byteSource);
+        final List<BufferedImage> images = IcnsDecoder.decodeAllImages(contents.icnsElements);
+        if (images.isEmpty()) {
+            throw new ImagingException("No icons in ICNS file");
+        }
+        final BufferedImage image0 = images.get(0);
+        return new ImageInfo("Icns", 32, new ArrayList<>(),
+                ImageFormats.ICNS, "ICNS Apple Icon Image",
+                image0.getHeight(), "image/x-icns", images.size(), 0, 0, 0, 0,
+                image0.getWidth(), false, true, false,
+                ImageInfo.ColorType.RGB,
+                ImageInfo.CompressionAlgorithm.UNKNOWN);
+    }
+
+    @Override
+    public Dimension getImageSize(final ByteSource byteSource, final IcnsImagingParameters params)
+            throws ImagingException, IOException {
+        final IcnsContents contents = readImage(byteSource);
+        final List<BufferedImage> images = IcnsDecoder.decodeAllImages(contents.icnsElements);
+        if (images.isEmpty()) {
+            throw new ImagingException("No icons in ICNS file");
+        }
+        final BufferedImage image0 = images.get(0);
+        return new Dimension(image0.getWidth(), image0.getHeight());
+    }
+
+    // FIXME should throw UOE
+    @Override
+    public ImageMetadata getMetadata(final ByteSource byteSource, final IcnsImagingParameters params)
+            throws ImagingException, IOException {
+        return null;
+    }
+
+    @Override
+    public String getName() {
+        return "Apple Icon Image";
+    }
 
     private IcnsElement readIcnsElement(final InputStream is, final int remainingSize) throws IOException {
         // Icon type (4 bytes)
@@ -187,18 +208,20 @@ public class IcnsImageParser extends ImageParser<IcnsImagingParameters> {
         return new IcnsElement(type, elementSize, data);
     }
 
-    private static class IcnsContents {
-        public final IcnsHeader icnsHeader;
-        public final IcnsElement[] icnsElements;
+    private IcnsHeader readIcnsHeader(final InputStream is)
+            throws ImagingException, IOException {
+        final int magic = read4Bytes("Magic", is, "Not a Valid ICNS File", getByteOrder());
+        final int fileSize = read4Bytes("FileSize", is, "Not a Valid ICNS File", getByteOrder());
 
-        IcnsContents(final IcnsHeader icnsHeader, final IcnsElement[] icnsElements) {
-            this.icnsHeader = icnsHeader;
-            this.icnsElements = icnsElements;
+        if (magic != ICNS_MAGIC) {
+            throw new ImagingException("Not a Valid ICNS File: " + "magic is 0x" + Integer.toHexString(magic));
         }
+
+        return new IcnsHeader(magic, fileSize);
     }
 
     private IcnsContents readImage(final ByteSource byteSource)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         try (InputStream is = byteSource.getInputStream()) {
             final IcnsHeader icnsHeader = readIcnsHeader(is);
 
@@ -214,37 +237,8 @@ public class IcnsImageParser extends ImageParser<IcnsImagingParameters> {
     }
 
     @Override
-    public boolean dumpImageFile(final PrintWriter pw, final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        final IcnsContents icnsContents = readImage(byteSource);
-        icnsContents.icnsHeader.dump(pw);
-        for (final IcnsElement icnsElement : icnsContents.icnsElements) {
-            icnsElement.dump(pw);
-        }
-        return true;
-    }
-
-    @Override
-    public final BufferedImage getBufferedImage(final ByteSource byteSource,
-            final IcnsImagingParameters params) throws ImageReadException, IOException {
-        final IcnsContents icnsContents = readImage(byteSource);
-        final List<BufferedImage> result = IcnsDecoder.decodeAllImages(icnsContents.icnsElements);
-        if (!result.isEmpty()) {
-            return result.get(0);
-        }
-        throw new ImageReadException("No icons in ICNS file");
-    }
-
-    @Override
-    public List<BufferedImage> getAllBufferedImages(final ByteSource byteSource)
-            throws ImageReadException, IOException {
-        final IcnsContents icnsContents = readImage(byteSource);
-        return IcnsDecoder.decodeAllImages(icnsContents.icnsElements);
-    }
-
-    @Override
     public void writeImage(final BufferedImage src, final OutputStream os, final IcnsImagingParameters params)
-            throws ImageWriteException, IOException {
+            throws ImagingException, IOException {
         IcnsType imageType;
         if (src.getWidth() == 16 && src.getHeight() == 16) {
             imageType = IcnsType.ICNS_16x16_32BIT_IMAGE;
@@ -255,7 +249,7 @@ public class IcnsImageParser extends ImageParser<IcnsImagingParameters> {
         } else if (src.getWidth() == 128 && src.getHeight() == 128) {
             imageType = IcnsType.ICNS_128x128_32BIT_IMAGE;
         } else {
-            throw new ImageWriteException("Invalid/unsupported source width "
+            throw new ImagingException("Invalid/unsupported source width "
                     + src.getWidth() + " and height " + src.getHeight());
         }
 

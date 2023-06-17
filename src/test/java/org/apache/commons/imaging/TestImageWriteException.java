@@ -27,12 +27,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
 /**
- * Tests for {@link ImageWriteException}.
+ * Tests for {@link ImagingException}.
  */
 public class TestImageWriteException {
 
     public static Stream<Object[]> data() {
-        final ImageWriteException exception = new ImageWriteException(null);
+        final ImagingException exception = new ImagingException((String) null);
+        // @formatter:off
         return Stream.of(
                 new Object[] {null, "null"},
                 new Object[] {new Object[] {Integer.valueOf(1)}, "[Object[]: 1]"},
@@ -46,26 +47,27 @@ public class TestImageWriteException {
                 new Object[] {new boolean[] {true, false, true}, "[boolean[]: 3]"},
                 new Object[] {exception, exception.getClass().getName()}
                 );
+        // @formatter:on
+    }
+
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testCreateExceptionWithData(final Object data, final String expectedType) {
+        final ImagingException exception = new ImagingException("imaging", data);
+        assertEquals(String.format("imaging: %s (%s)", data, expectedType), exception.getMessage());
     }
 
     @Test
     public void testCreateExceptionWithMessage() {
-        final ImageWriteException exception = new ImageWriteException("imaging");
+        final ImagingException exception = new ImagingException("imaging");
         assertEquals("imaging", exception.getMessage());
         assertNull(exception.getCause());
     }
 
     @Test
     public void testCreateExceptionWithMessageAndCause() {
-        final ImageWriteException exception = new ImageWriteException("imaging", new Exception("cause"));
+        final ImagingException exception = new ImagingException("imaging", new Exception("cause"));
         assertEquals("imaging", exception.getMessage());
         assertNotNull(exception.getCause());
-    }
-
-    @ParameterizedTest
-    @MethodSource("data")
-    public void testCreateExceptionWithData(final Object data, final String expectedType) {
-        final ImageWriteException exception = new ImageWriteException("imaging", data);
-        assertEquals(String.format("imaging: %s (%s)", data, expectedType), exception.getMessage());
     }
 }

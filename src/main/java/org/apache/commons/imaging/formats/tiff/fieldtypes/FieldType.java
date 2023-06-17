@@ -21,8 +21,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
-import org.apache.commons.imaging.ImageReadException;
-import org.apache.commons.imaging.ImageWriteException;
+import org.apache.commons.imaging.ImagingException;
 import org.apache.commons.imaging.formats.tiff.TiffField;
 
 /**
@@ -43,10 +42,6 @@ public abstract class FieldType {
     public static final FieldTypeDouble DOUBLE = new FieldTypeDouble(12, "Double");
     public static final FieldTypeLong IFD = new FieldTypeLong(13, "IFD");
 
-    private final int type;
-    private final String name;
-    private final int elementSize;
-
     public static final List<FieldType> ANY =
             Collections.unmodifiableList(Arrays.asList(
                     BYTE, ASCII, SHORT,
@@ -54,11 +49,9 @@ public abstract class FieldType {
                     UNDEFINED, SSHORT, SLONG,
                     SRATIONAL, FLOAT, DOUBLE,
                     IFD));
-
     public static final List<FieldType> SHORT_OR_LONG =
             Collections.unmodifiableList(Arrays.asList(
                     SHORT, LONG));
-
     public static final List<FieldType> SHORT_OR_RATIONAL =
             Collections.unmodifiableList(Arrays.asList(
                     SHORT, RATIONAL));
@@ -87,15 +80,26 @@ public abstract class FieldType {
             Collections.unmodifiableList(Arrays.asList(
                     ASCII, BYTE));
 
+    public static FieldType getFieldType(final int type) throws ImagingException {
+        for (final FieldType fieldType : ANY) {
+            if (fieldType.getType() == type) {
+                return fieldType;
+            }
+        }
+        throw new ImagingException("Field type " + type + " is unsupported");
+    }
+
+    private final int type;
+
+    private final String name;
+
+    private final int elementSize;
+
+
     protected FieldType(final int type, final String name, final int elementSize) {
         this.type = type;
         this.name = name;
         this.elementSize = elementSize;
-    }
-
-
-    public int getType() {
-        return type;
     }
 
     public String getName() {
@@ -106,15 +110,10 @@ public abstract class FieldType {
         return elementSize;
     }
 
-    public static FieldType getFieldType(final int type) throws ImageReadException {
-        for (final FieldType fieldType : ANY) {
-            if (fieldType.getType() == type) {
-                return fieldType;
-            }
-        }
-        throw new ImageReadException("Field type " + type + " is unsupported");
+    public int getType() {
+        return type;
     }
 
     public abstract Object getValue(TiffField entry);
-    public abstract byte[] writeData(Object o, ByteOrder byteOrder) throws ImageWriteException;
+    public abstract byte[] writeData(Object o, ByteOrder byteOrder) throws ImagingException;
 }

@@ -24,11 +24,13 @@ import org.apache.commons.imaging.formats.tiff.taginfos.TagInfo;
 import org.apache.commons.imaging.formats.tiff.taginfos.TagInfoUndefineds;
 
 /**
- * TIFF specification supplement 2
- * <BR>
+ * TIFF specification supplement 2.
+ * <p>
  * Adobe Photoshop (R) TIFF Technical Notes
- * <BR>
+ * </p>
+ * <p>
  * http://partners.adobe.com/public/developer/en/tiff/TIFFphotoshop.pdf
+ * </p>
  */
 public final class AdobePhotoshopTagConstants {
 

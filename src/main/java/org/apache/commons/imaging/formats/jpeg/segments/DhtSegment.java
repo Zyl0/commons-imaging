@@ -24,9 +24,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-public class DhtSegment extends Segment {
-    public final List<HuffmanTable> huffmanTables;
+import org.apache.commons.imaging.common.Allocator;
 
+public class DhtSegment extends Segment {
     public static class HuffmanTable {
         // some arrays are better off one-based
         // to avoid subtractions by one later when indexing them
@@ -75,7 +75,7 @@ public class DhtSegment extends Segment {
             k = 0;
             int code = 0;
             int si = huffSize[0];
-            huffCode = new int[lastK];
+            huffCode = Allocator.intArray(lastK);
             while (true) {
                 if (k >= lastK) {
                     break;
@@ -121,18 +121,20 @@ public class DhtSegment extends Segment {
             return huffVal[i];
         }
 
-        public int getMinCode(final int i) {
-            return minCode[i];
-        }
-
         public int getMaxCode(final int i) {
             return maxCode[i];
+        }
+
+        public int getMinCode(final int i) {
+            return minCode[i];
         }
 
         public int getValPtr(final int i) {
             return valPtr[i];
         }
     }
+
+    public final List<HuffmanTable> huffmanTables;
 
     public DhtSegment(final int marker, final byte[] segmentData) throws IOException {
         this(marker, segmentData.length, new ByteArrayInputStream(segmentData));
@@ -156,7 +158,7 @@ public class DhtSegment extends Segment {
                 length--;
                 bitsSum += bits[i];
             }
-            final int[] huffVal = new int[bitsSum];
+            final int[] huffVal = Allocator.intArray(bitsSum);
             for (int i = 0; i < bitsSum; i++) {
                 huffVal[i] = 0xff & readByte("Vij", is, "Not a Valid JPEG File");
                 length--;

@@ -22,17 +22,17 @@ import java.io.InputStream;
 import org.apache.commons.imaging.ImageFormat;
 import org.apache.commons.imaging.ImageFormats;
 import org.apache.commons.imaging.ImageInfo;
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
 
 class PpmFileInfo extends FileInfo {
     private final int max;
     private final float scale;
     private final int bytesPerSample;
 
-    PpmFileInfo(final int width, final int height, final boolean rawBits, final int max) throws ImageReadException {
+    PpmFileInfo(final int width, final int height, final boolean rawBits, final int max) throws ImagingException {
         super(width, height, rawBits);
         if (max <= 0) {
-            throw new ImageReadException("PPM maxVal " + max + " is out of range [1;65535]");
+            throw new ImagingException("PPM maxVal " + max + " is out of range [1;65535]");
         }
         if (max <= 255) {
             scale = 255f;
@@ -41,24 +41,19 @@ class PpmFileInfo extends FileInfo {
             scale = 65535f;
             bytesPerSample = 2;
         } else {
-            throw new ImageReadException("PPM maxVal " + max + " is out of range [1;65535]");
+            throw new ImagingException("PPM maxVal " + max + " is out of range [1;65535]");
         }
         this.max = max;
     }
 
     @Override
-    public boolean hasAlpha() {
-        return false;
-    }
-
-    @Override
-    public int getNumComponents() {
-        return 3;
-    }
-
-    @Override
     public int getBitDepth() {
         return max;
+    }
+
+    @Override
+    public ImageInfo.ColorType getColorType() {
+        return ImageInfo.ColorType.RGB;
     }
 
     @Override
@@ -77,8 +72,8 @@ class PpmFileInfo extends FileInfo {
     }
 
     @Override
-    public ImageInfo.ColorType getColorType() {
-        return ImageInfo.ColorType.RGB;
+    public int getNumComponents() {
+        return 3;
     }
 
     @Override
@@ -113,5 +108,10 @@ class PpmFileInfo extends FileInfo {
               | ((0xff & red)   << 16)
               | ((0xff & green) << 8)
               | ((0xff & blue)  << 0);
+    }
+
+    @Override
+    public boolean hasAlpha() {
+        return false;
     }
 }

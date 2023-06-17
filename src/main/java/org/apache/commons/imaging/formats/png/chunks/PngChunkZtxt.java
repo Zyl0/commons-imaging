@@ -16,52 +16,51 @@
  */
 package org.apache.commons.imaging.formats.png.chunks;
 
-import static org.apache.commons.imaging.common.BinaryFunctions.findNull;
-import static org.apache.commons.imaging.common.BinaryFunctions.getStreamBytes;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.InflaterInputStream;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
+import org.apache.commons.imaging.common.BinaryFunctions;
 import org.apache.commons.imaging.formats.png.PngConstants;
 import org.apache.commons.imaging.formats.png.PngText;
+import org.apache.commons.io.IOUtils;
 
 public class PngChunkZtxt extends PngTextChunk {
 
-    public final String keyword;
-    public final String text;
+    private final String keyword;
+    private final String text;
 
-    public PngChunkZtxt(final int length, final int chunkType, final int crc, final byte[] bytes)
-            throws ImageReadException, IOException {
+    public PngChunkZtxt(final int length, final int chunkType, final int crc, final byte[] bytes) throws ImagingException, IOException {
         super(length, chunkType, crc, bytes);
 
-        int index = findNull(bytes);
-        if (index < 0) {
-            throw new ImageReadException(
-                    "PNG zTXt chunk keyword is unterminated.");
-        }
-
+        int index = BinaryFunctions.findNull(bytes, "PNG zTXt chunk keyword is unterminated.");
         keyword = new String(bytes, 0, index, StandardCharsets.ISO_8859_1);
         index++;
 
         final int compressionMethod = bytes[index++];
         if (compressionMethod != PngConstants.COMPRESSION_DEFLATE_INFLATE) {
-            throw new ImageReadException(
-                    "PNG zTXt chunk has unexpected compression method: "
-                            + compressionMethod);
+            throw new ImagingException("PNG zTXt chunk has unexpected compression method: " + compressionMethod);
         }
 
         final int compressedTextLength = bytes.length - index;
-        final byte[] compressedText = new byte[compressedTextLength];
+        final byte[] compressedText = Allocator.byteArray(compressedTextLength);
         System.arraycopy(bytes, index, compressedText, 0, compressedTextLength);
 
-        text = new String(getStreamBytes(new InflaterInputStream(new ByteArrayInputStream(compressedText))), StandardCharsets.ISO_8859_1);
+        text = new String(IOUtils.toByteArray(new InflaterInputStream(new ByteArrayInputStream(compressedText))), StandardCharsets.ISO_8859_1);
+    }
+
+    @Override
+    public PngText getContents() {
+        return new PngText.Ztxt(keyword, text);
     }
 
     /**
-     * @return Returns the keyword.
+     * Gets the keyword.
+     *
+     * @return the keyword.
      */
     @Override
     public String getKeyword() {
@@ -69,16 +68,13 @@ public class PngChunkZtxt extends PngTextChunk {
     }
 
     /**
-     * @return Returns the text.
+     * Gets the text.
+     *
+     * @return the text.
      */
     @Override
     public String getText() {
         return text;
-    }
-
-    @Override
-    public PngText getContents() {
-        return new PngText.Ztxt(keyword, text);
     }
 
 }

@@ -21,13 +21,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteOrder;
 
-import org.apache.commons.imaging.ImageReadException;
+import org.apache.commons.imaging.ImagingException;
+import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.BinaryFileParser;
-import org.apache.commons.imaging.common.mylzw.BitsToByteInputStream;
-import org.apache.commons.imaging.common.mylzw.MyBitInputStream;
 import org.apache.commons.imaging.formats.psd.PsdHeaderInfo;
 import org.apache.commons.imaging.formats.psd.PsdImageContents;
 import org.apache.commons.imaging.formats.psd.dataparsers.DataParser;
+import org.apache.commons.imaging.mylzw.BitsToByteInputStream;
+import org.apache.commons.imaging.mylzw.MyBitInputStream;
 
 public class UncompressedDataReader implements DataReader {
 
@@ -40,17 +41,18 @@ public class UncompressedDataReader implements DataReader {
     @Override
     public void readData(final InputStream is, final BufferedImage bi,
             final PsdImageContents imageContents, final BinaryFileParser bfp)
-            throws ImageReadException, IOException {
+            throws ImagingException, IOException {
         final PsdHeaderInfo header = imageContents.header;
         final int width = header.columns;
         final int height = header.rows;
 
         final int channelCount = dataParser.getBasicChannelsCount();
         final int depth = header.depth;
-        final MyBitInputStream mbis = new MyBitInputStream(is, ByteOrder.BIG_ENDIAN);
+        final MyBitInputStream mbis = new MyBitInputStream(is, ByteOrder.BIG_ENDIAN, false);
         // we want all samples to be bytes
         try (BitsToByteInputStream bbis = new BitsToByteInputStream(mbis, 8)) {
-            final int[][][] data = new int[channelCount][height][width];
+            final int[][][] data = new int[Allocator.check(channelCount)][Allocator
+                    .check(height)][Allocator.check(width)];
             for (int channel = 0; channel < channelCount; channel++) {
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
