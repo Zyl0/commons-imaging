@@ -74,15 +74,15 @@ public class ImageDump {
             return;
         }
         for (final String key : keys) {
-            LOGGER.log(Level.FINE, "{0}: {1}: {2}", new String[]{prefix, key, src.getProperty(key).toString()});
+            LOGGER.log(Level.FINE, "{0}: {1}: {2}", new Object[]{prefix, key, src.getProperty(key)});
         }
     }
 
     public void dumpColorSpace(final String prefix, final ColorSpace cs) throws IOException {
-        LOGGER.fine(prefix + ": " + "type: " + cs.getType() + " (" + colorSpaceTypeToName(cs) + ")");
+        LOGGER.log(Level.FINE, "{0} : type: {1} ({2})", new Object[]{prefix, cs.getType(), colorSpaceTypeToName(cs)});
 
         if (!(cs instanceof ICC_ColorSpace)) {
-            LOGGER.fine(prefix + ": " + "Unknown ColorSpace: " + cs.getClass().getName());
+            LOGGER.log(Level.FINE, "{0}: Unknown ColorSpace: {1}", new Object[]{prefix, cs.getClass().getName()});
             return;
         }
 
