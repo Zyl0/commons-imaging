@@ -21,6 +21,7 @@ import java.awt.color.ICC_ColorSpace;
 import java.awt.color.ICC_Profile;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.commons.imaging.icc.IccProfileInfo;
@@ -69,11 +70,11 @@ public class ImageDump {
     public void dumpBIProps(final String prefix, final BufferedImage src) {
         final String[] keys = src.getPropertyNames();
         if (keys == null) {
-            LOGGER.fine(String.format("%s : no props", prefix));
+            LOGGER.log(Level.FINE, "%s : no props", prefix);
             return;
         }
         for (final String key : keys) {
-            LOGGER.fine(String.format("%s: %s: %s", prefix, key, src.getProperty(key).toString()));
+            LOGGER.log(Level.FINE, "%s: %s: %s", new String[]{prefix, key, src.getProperty(key).toString()});
         }
     }
 
