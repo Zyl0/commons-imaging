@@ -70,11 +70,11 @@ public class ImageDump {
     public void dumpBIProps(final String prefix, final BufferedImage src) {
         final String[] keys = src.getPropertyNames();
         if (keys == null) {
-            LOGGER.log(Level.FINE, "%s : no props", prefix);
+            LOGGER.log(Level.FINE, "{0} : no props", prefix);
             return;
         }
         for (final String key : keys) {
-            LOGGER.log(Level.FINE, "%s: %s: %s", new String[]{prefix, key, src.getProperty(key).toString()});
+            LOGGER.log(Level.FINE, "{0}: {1}: {2}", new String[]{prefix, key, src.getProperty(key).toString()});
         }
     }
 
