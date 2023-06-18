@@ -441,8 +441,8 @@ public class JpegDecoder extends BinaryFileParser implements JpegUtils.Visitor {
             final int hSize = 8 * hMax;
             final int vSize = 8 * vMax;
 
-            final int xMCUs = (sofnSegment.width + hSize - 1) / hSize;
-            final int yMCUs = (sofnSegment.height + vSize - 1) / vSize;
+            final int xMCUs = (sofnSegment.width + hSize - 1) / hSize > 0 ? hSize : 1;
+            final int yMCUs = (sofnSegment.height + vSize - 1) / vSize > 0 ? vSize : 1;
             final Block[] mcu = allocateMCUMemory();
             final Block[] scaledMCU = Allocator.array(mcu.length, Block[]::new, Block.SHALLOW_SIZE);
             Arrays.setAll(scaledMCU, i -> new Block(hSize, vSize));
