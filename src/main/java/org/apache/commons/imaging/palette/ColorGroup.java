@@ -121,7 +121,7 @@ class ColorGroup {
             greenTotal += (long) color.count * color.green;
             blueTotal += (long) color.count * color.blue;
         }
-
+        countTotal = countTotal > 0 ? countTotal : 1;
         final int alpha = ignoreAlpha ? 0xff : (int) Math.round((double) alphaTotal / countTotal);
         final int red = (int) Math.round((double) redTotal / countTotal);
         final int green = (int) Math.round((double) greenTotal / countTotal);
