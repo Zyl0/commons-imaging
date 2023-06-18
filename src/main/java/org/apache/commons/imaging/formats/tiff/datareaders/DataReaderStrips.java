@@ -45,7 +45,6 @@ public final class DataReaderStrips extends ImageDataReader {
     private final int bitsPerPixel;
     private final int compression;
     private final int rowsPerStrip;
-    private final TiffPlanarConfiguration planarConfiguration;
     private final ByteOrder byteOrder;
     private int x;
     private int y;
@@ -65,7 +64,6 @@ public final class DataReaderStrips extends ImageDataReader {
         this.bitsPerPixel = bitsPerPixel;
         this.compression = compression;
         this.rowsPerStrip = rowsPerStrip;
-        this.planarConfiguration = planarConfiguration;
         this.imageData = imageData;
         this.byteOrder = byteOrder;
     }
