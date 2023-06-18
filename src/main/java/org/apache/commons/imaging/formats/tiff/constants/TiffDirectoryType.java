@@ -62,11 +62,11 @@ public enum TiffDirectoryType {
     }
     private final boolean isImageDirectory;
     public final int directoryType;
-    public final String name;
+    public final String typeName;
     TiffDirectoryType(final boolean isImageDirectory, final int directoryType, final String name) {
         this.isImageDirectory = isImageDirectory;
         this.directoryType = directoryType;
-        this.name = name;
+        this.typeName = name;
     }
     public boolean isImageDirectory() {
         return isImageDirectory;

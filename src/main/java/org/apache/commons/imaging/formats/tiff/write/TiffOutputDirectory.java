@@ -577,7 +577,7 @@ public final class TiffOutputDirectory extends TiffOutputItem implements Iterabl
     @Override
     public String getItemDescription() {
         final TiffDirectoryType dirType = TiffDirectoryType.getExifDirectoryType(getType());
-        return "Directory: " + dirType.name + " (" + getType() + ")";
+        return "Directory: " + dirType.typeName + " (" + getType() + ")";
     }
 
     @Override
