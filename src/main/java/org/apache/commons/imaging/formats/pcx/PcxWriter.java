@@ -19,7 +19,9 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
+import java.util.logging.Logger;
 
+import org.apache.commons.imaging.FormatCompliance;
 import org.apache.commons.imaging.PixelDensity;
 import org.apache.commons.imaging.common.Allocator;
 import org.apache.commons.imaging.common.BinaryOutputStream;
@@ -32,6 +34,8 @@ class PcxWriter {
     private int planesWanted = -1;
     private PixelDensity pixelDensity;
     private final RleWriter rleWriter;
+    private final Logger LOGGER = Logger.getLogger(FormatCompliance.class.getName());
+
 
     PcxWriter(PcxImagingParameters params) {
         // uncompressed PCX files are not even documented in ZSoft's spec,
@@ -66,6 +70,7 @@ class PcxWriter {
         final BinaryOutputStream bos = BinaryOutputStream.littleEndian(os);
         final int bitDepth;
         final int planes;
+
         if (palette == null || bitDepthWanted == 24 || bitDepthWanted == 32) {
             if (bitDepthWanted == 32) {
                 bitDepth = 32;
@@ -128,12 +133,12 @@ class PcxWriter {
         final byte[] palette16 = new byte[16 * 3];
         for (int i = 0; i < 16; i++) {
             int rgb;
-            if (i < palette.length()) {
+            if (palette != null && i < palette.length()) {
                 rgb = palette.getEntry(i);
-            } else {
+            }else {
                 rgb = 0;
             }
-            palette16[3 * i + 0] = (byte) (0xff & (rgb >> 16));
+            palette16[3 * i] = (byte) (0xff & (rgb >> 16));
             palette16[3 * i + 1] = (byte) (0xff & (rgb >> 8));
             palette16[3 * i + 2] = (byte) (0xff & rgb);
         }
