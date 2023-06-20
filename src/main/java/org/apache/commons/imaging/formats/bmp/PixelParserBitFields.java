@@ -82,7 +82,7 @@ class PixelParserBitFields extends PixelParserSimple {
 
         switch (bhi.bitsPerPixel) {
         case 8:
-            data = 0xff & imageData[byteCount + 0];
+            data = 0xff & imageData[byteCount];
             byteCount += 1;
             break;
         case 24:
@@ -111,7 +111,7 @@ class PixelParserBitFields extends PixelParserSimple {
         blue = (blueShift >= 0) ? blue >> blueShift : blue << -blueShift;
         alpha = (alphaShift >= 0) ? alpha >> alphaShift : alpha << -alphaShift;
 
-        return (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
+        return (alpha << 24) | (red << 16) | (green << 8) | (blue);
     }
 
     @Override

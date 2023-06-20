@@ -649,7 +649,7 @@ public final class ColorConversions {
 
         final int alpha = 0xff;
 
-        return (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
+        return (alpha << 24) | (red << 16) | (green << 8) | (blue);
     }
 
     private static int convertRGBtoRGB(int red, int green, int blue) {
@@ -659,7 +659,7 @@ public final class ColorConversions {
 
         final int alpha = 0xff;
 
-        return (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
+        return (alpha << 24) | (red << 16) | (green << 8) | (blue);
     }
 
     // See also c# implementation:
@@ -667,7 +667,7 @@ public final class ColorConversions {
     public static ColorXyz convertRGBtoXYZ(final int rgb) {
         final int r = 0xff & (rgb >> 16);
         final int g = 0xff & (rgb >> 8);
-        final int b = 0xff & (rgb >> 0);
+        final int b = 0xff & (rgb);
 
         double var_R = r / 255.0; // Where R = 0 ÷ 255
         double var_G = g / 255.0; // Where G = 0 ÷ 255

@@ -41,7 +41,7 @@ abstract class PixelParser {
 
     int getColorTableRGB(int index) {
         index *= 4;
-        final int blue = 0xff & colorTable[index + 0];
+        final int blue = 0xff & colorTable[index];
         final int green = 0xff & colorTable[index + 1];
         final int red = 0xff & colorTable[index + 2];
         final int alpha = 0xff;
@@ -49,7 +49,7 @@ abstract class PixelParser {
         return (alpha << 24)
                 | (red << 16)
                 | (green << 8)
-                | (blue << 0);
+                | (blue);
     }
 
     public abstract void processImage(ImageBuilder imageBuilder) throws ImagingException, IOException;

@@ -169,7 +169,7 @@ class ColorSpaceSubset {
         redsum /= total;
         greensum /= total;
         bluesum /= total;
-        rgb = (int) (((redsum & 0xff) << 16) | ((greensum & 0xff) << 8) | ((bluesum & 0xff) << 0));
+        rgb = (int) (((redsum & 0xff) << 16) | ((greensum & 0xff) << 8) | ((bluesum & 0xff)));
     }
 
     public final void setIndex(final int i) {

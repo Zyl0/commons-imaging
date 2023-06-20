@@ -57,36 +57,36 @@ class PixelParserRgb extends PixelParserSimple {
             return getColorTableRGB(sample);
         }
         case 8: {
-            final int sample = 0xff & imageData[byteCount + 0];
+            final int sample = 0xff & imageData[byteCount];
             final int rgb = getColorTableRGB(sample);
             byteCount += 1;
             return rgb;
         }
         case 16: {
             final int data = read2Bytes("Pixel", is, "BMP Image Data", ByteOrder.LITTLE_ENDIAN);
-            final int blue = (0x1f & (data >> 0)) << 3;
+            final int blue = (0x1f & (data)) << 3;
             final int green = (0x1f & (data >> 5)) << 3;
             final int red = (0x1f & (data >> 10)) << 3;
             final int alpha = 0xff;
-            final int rgb = (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
+            final int rgb = (alpha << 24) | (red << 16) | (green << 8) | (blue);
             byteCount += 2;
             return rgb;
         }
         case 24: {
-            final int blue = 0xff & imageData[byteCount + 0];
+            final int blue = 0xff & imageData[byteCount];
             final int green = 0xff & imageData[byteCount + 1];
             final int red = 0xff & imageData[byteCount + 2];
             final int alpha = 0xff;
-            final int rgb = (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
+            final int rgb = (alpha << 24) | (red << 16) | (green << 8) | (blue);
             byteCount += 3;
             return rgb;
         }
         case 32: {
-            final int blue = 0xff & imageData[byteCount + 0];
+            final int blue = 0xff & imageData[byteCount];
             final int green = 0xff & imageData[byteCount + 1];
             final int red = 0xff & imageData[byteCount + 2];
             final int alpha = 0xff;
-            final int rgb = (alpha << 24) | (red << 16) | (green << 8) | (blue << 0);
+            final int rgb = (alpha << 24) | (red << 16) | (green << 8) | (blue);
             byteCount += 4;
             return rgb;
         }
