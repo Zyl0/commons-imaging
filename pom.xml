@@ -219,6 +219,12 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <version>4.13.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.hamcrest</groupId>
       <artifactId>hamcrest</artifactId>
       <version>2.2</version>
@@ -234,6 +240,17 @@
       <artifactId>jol-core</artifactId>
       <version>0.17</version>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.pitest</groupId>
+      <artifactId>pitest-parent</artifactId>
+      <version>1.7.1</version>
+      <type>pom</type>
+    </dependency>
+    <dependency>
+      <groupId>org.pitest</groupId>
+      <artifactId>pitest-junit5-plugin</artifactId>
+      <version>0.14</version>
     </dependency>
   </dependencies>
 
@@ -332,6 +349,25 @@
               </tagClass>
             </tagClasses>
           </tagListOptions>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>cobertura-maven-plugin</artifactId>
+        <version>2.7</version>
+      </plugin>
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <version>1.7.1</version>
+        <configuration>
+          <verbose>true</verbose>
+          <targetClasses>
+            <param>org.apache.commons.imaging.*</param>
+          </targetClasses>
+          <targetTests>
+            <param>org.apache.commons.imaging.*</param>
+          </targetTests>
         </configuration>
       </plugin>
       <plugin>
